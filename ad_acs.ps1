@@ -62,17 +62,19 @@ function Log-Debug($mess) {
 ######################################################
 ######### ACS Requests Functions
 ######################################################
+function AcsError($data){
+        Log-Error("Got HTTP" + $data.error.status + ": "+$data.error.code)
+        Log-Error("Message: " + $data.error.message)
+}
 function GetUsersFromAcs {
     try { 
-        $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers 
-    } catch { 
-        $err = $_.Exception
+        $response = (Invoke-WebRequest -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers -Method Get)
+    } catch {   
         Log-Error("Can't retrieve Users from ACS")
-        Log-Error($err.Message)
+        AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
         Log-Error("Exiting...")
         exit 255
     } 
-        
     return $response.data
 }
 
@@ -93,12 +95,8 @@ function CreateAcsAccount($adUser){
     try {
         $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId" -Method Post -Headers $headers -Body $json -ContentType "application/json"
     } catch {
-        $err = $_.Exception
-        $mess = "Can't create new User " + $adUser.$acsUserName
-        $acsUserToJson = ConvertTo-Json $acsUser
-        Log-Error($mess)
-        Log-Error($acsUserToJson)
-        Log-Error($err.Message)
+        Log-Error("Can't create new User " + $adUser.$acsUserName)
+        AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
     }
     return $response
 }
@@ -109,9 +107,8 @@ function DeleteAcsAccount($acsUser){
     try {
         $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&ids=$acsUserId" -Method Delete -Headers $headers
     } catch {
-        $err = $_.Exception
         Log-Error("Can't delete the User " + $acsUser.userName)
-        Log-Error($err.Message)
+        AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
     }
     return $response
 }
