@@ -1,45 +1,27 @@
 ﻿<#--------------------------------------------------------------
- application credentials
- These information 
+LOAD SETTINGS
 --------------------------------------------------------------#>
-$clientId="xxxxxx"
-$clientSecret="xxxxxx"
-$redirectUrl="https://xxxxxx"
+$settings=$PSScriptRoot + "\settings.ini"
+Get-Content $settings | foreach-object -begin {$params=@{}} -process { $k = [regex]::split($_,'='); if(($k[0].CompareTo("") -ne 0) -and ($k[0].StartsWith("[") -ne $True) -and ($k[0].StartsWith('#') -ne $True)) { $params.Add($k[0], $k[1].Trim()) } }
 
-<#--------------------------------------------------------------
-ACS account parameters
---------------------------------------------------------------#>
-$vpcUrl="cloud-ie.aerohive.com"
-$accessToken="Z83CvGzqTco-6O1uAsJuoTRsWf_Y8zBXf4d129a2"
-$refreshToken="tm7Hku_khmmjQN2uDMtEF1Az78f0SfKJ"
-$expireDate=0
-$ownerId=34515
-
-<#--------------------------------------------------------------
- WiFi account parameters
---------------------------------------------------------------#>
-# User Group
-$acsUserGroupId = xxxxxxxx
-# bindings between ACS and AD parameters
-$acsUserName = "SamAccountName"
-$acsEmail = "UserPrincipalName"
-#AD phone property can be "MobilePhone", "OfficePhone" or "HomePhone"
-$acsPhone = "OfficePhone"
-$acsOrganization = "Organization"
-# may be 'NO_DELIVERY', 'EMAIL', 'SMS' or 'EMAIL_AND_SMS'
-$acsDeliveryMethod = "EMAIL_AND_SMS"
-<#--------------------------------------------------------------
- AD Group: the script will create a Wi-Fi account for every 
- user belonging to this Group 
---------------------------------------------------------------#>
-$adGroup="Domain Admins"
-<#--------------------------------------------------------------
-Logging parameters
---------------------------------------------------------------#>
-$logFile="C:\Users\tmunzer.AH-LAB\Desktop\acs.log"
-$logToAFile = $true
-$logToConsole = $true
-
+$clientId=$params.clientId
+$clientSecret=$params.clientSecret
+$redirectUrl=$params.redirectUrl
+$vpcUrl=$params.vpcUrl
+$accessToken=$params.accessToken
+$refreshToken=$params.refreshToken
+$expireDate=$params.expireDate
+$ownerId=$params.ownerId
+$acsUserGroupId = $params.acsUserGroupId
+$acsUserName = $params.acsUserName.ToString()
+$acsEmail = $params.acsEmail
+$acsPhone = $params.acsPhone
+$acsOrganization = $params.acsOrganization
+$acsDeliveryMethod = $params.acsDeliveryMethod
+$adGroup=$params.adGroup
+$logFile=$params.logFile
+$logToAFile=$params.logToAFile
+$logToConsole=$params.logToConsole
 
 
 <#--------------------------------------------------------------
@@ -59,21 +41,21 @@ function Log-Error ($mess) {
     $date = Get-Date -Format d
     $time = Get-Date -Format HH:mm:ss.fff
     $logstring = "$date $time ERROR: $mess"
-    if ($logToAFile) {Add-content $Logfile -value $logstring}
+    if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Red}
 }
 function Log-Info ($mess) {
     $date = Get-Date -Format d
     $time = Get-Date -Format HH:mm:ss.fff
     $logstring = "$date $time INFO: $mess"
-    if ($logToAFile) {Add-content $Logfile -value $logstring}
+    if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Green}
 }
 function Log-Debug($mess) {
     $date = Get-Date -Format d
     $time = Get-Date -Format HH:mm:ss.fff
     $logstring = "$date $time DEBUG: $mess"
-    if ($logToAFile) {Add-content $Logfile -value $logstring}
+    if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Gray}
 }
 
@@ -139,7 +121,6 @@ function DeleteAcsAccount($acsUser){
 ######################################################
 function GetUsersFromAd {
     $adAccounts = @()
-
     $users = Get-ADGroupMember $adGroup -Recursive 
     foreach ($user in $users)
     {
