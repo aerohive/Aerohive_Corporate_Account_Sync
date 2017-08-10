@@ -66,9 +66,9 @@ function AcsError($data){
         Log-Error("Got HTTP" + $data.error.status + ": "+$data.error.code)
         Log-Error("Message: " + $data.error.message)
 }
-function GetUsersFromAcs {
+function GetUsersFromAcs() {
     try { 
-        $response = (Invoke-WebRequest -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers -Method Get)
+        $response = (Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers -Method Get)
     } catch {   
         Log-Error("Can't retrieve Users from ACS")
         AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
@@ -116,7 +116,7 @@ function DeleteAcsAccount($acsUser){
 ######################################################
 ######### AD Requests Functions
 ######################################################
-function GetUsersFromAd {
+function GetUsersFromAd() {
     $adAccounts = @()
     $users = Get-ADGroupMember $adGroup -Recursive 
     foreach ($user in $users)
@@ -136,6 +136,7 @@ function GetUsersFromAd {
 $acsUsers = GetUsersFromAcs
 $adUsers = GetUsersFromAd
 $validAcsUsers = @()
+$i=0
 foreach ($adUser in $adUsers)
 {
     $acsAccountExists = $false
@@ -159,12 +160,22 @@ foreach ($adUser in $adUsers)
         $mess = $adUser.$acsUserName + " is enabled and already has a PPSK. nothing to do"
         Log-Debug($mess)
     }
+    $i++
+    $percentage = (($i / $adUsers.length)  * 100)
+    Write-Progress -activity "Checking AD Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
+  Start-Sleep 1
+
 }
 
+
+$i = 0
 foreach ($acsUser in $acsUsers) {
     if ( $validAcsUsers -notcontains $acsUser) {
         $mess= $acsUSer.userName + " should be removed because it does not belong to the AD"
         Log-Debug($mess)
         DeleteAcsAccount($acsUser)
     }
+    $i++
+    $percentage = (($i / $acsUsers.length)  * 100)
+    Write-Progress -activity "Checking Aerohive Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
 }
