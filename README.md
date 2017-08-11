@@ -7,22 +7,29 @@ Aerohive Corporate Account Sync is a PowerShell Script using ACS APIs to automat
 * The Windows PowerShell Script Execution Policy should allow to execute unsigned scripts. To change the locale Execution Policy configuration, and allow to use local unsigned script, you can use the command `Set-ExecutionPolicy RemoteSigned`
 
 # Usage
-## SYNOPSIS
-        acas.ps1 [OPTION [WORD]]
+        SYNOPSIS
+                acas.ps1 [OPTION [WORD]]
 
-## DESCRIPTION
-        Aerohive Corporate Account Sync is a PowerShell Script using ACS 
-        APIs to automate the creation of User Accounts on HiveManager NG
-        for domain users.
+        DESCRIPTION
+                Aerohive Corporate Account Sync is a PowerShell Script using ACS 
+                APIs to automate the creation of User Accounts on HiveManager NG
+                for domain users.
 
-## options are
-* -h or -help:
-This help.
-* -f <file> or -file <file>:
-Path to the configuration file. By default, the script will try to find the settings.ini file in script location.
-* -t or -test <ad_user>:
-Test the AD configuration and display the available fields.
-* -c or -checkOnly:
-Only check the accounts. When the -c flag is present, the script will not create/remove the the account form HiveMaager NG.
+        options are
+                -h
+                -help               This help.
 
- 
+                -f <file>
+                -file <file>        Path to the configuration file. By default, 
+                                    the script will try to find the settings.ini 
+                                    file in script location.
+
+                -t 
+                -test <ad_user>     Test the AD configuration and display the 
+                                    available fields.
+
+                -c
+                -checkOnly          Only check the accounts. When the -c flag is 
+                                    present, the script will not create/remove
+                                    the the account form HiveMaager NG.
+            
