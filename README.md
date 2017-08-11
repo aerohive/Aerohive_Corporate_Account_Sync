@@ -26,26 +26,26 @@ You can also move the settings_example.ini file to settings.ini in the same fold
 
         options are
                 -h
-                -help               This help.
+                -help                   This help.
 
                 -f <file>
-                -file <file>        Path to the configuration file. By default, 
-                                    the script will try to find the settings.ini 
-                                    file in script location.
+                -file <file>            Path to the configuration file. By default, 
+                                        the script will try to find the settings.ini 
+                                        file in script location.
 
                 -t 
-                -test <ad_user>     Test the AD configuration and display the 
-                                    available fields.
+                -test <ad_user>         Test the AD configuration and display the 
+                                        available fields.
 
                 -a
-                -audit              Audit the AD and ACS users to list differences.
-                                    When the -a flag is present, the script will 
-                                    not create/remove any account.
+                -audit                  Audit the AD and ACS users to list differences.
+                                        When the -a flag is present, the script will 
+                                        not create/remove any account.
                 -r
-                -register           Register this script as a ScheduleJob. This will
+                -register               Register this script as a ScheduleJob. This will
                                         execute the script every day.
                                         This command required the administrator rights.
 
                 -u
-                -unregister         Unregister the ScheduleJob for this script.
+                -unregister             Unregister the ScheduleJob for this script.
                                         This command required the administrator rights.
