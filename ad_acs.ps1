@@ -296,7 +296,14 @@ DESCRIPTION
                                 When the -a flag is present, the script will 
                                 not create/remove any account.
             
+            -r
+            -register           Register this script as a ScheduleJob. This will
+                                execute the script every day.
+                                This command required the administrator rights.
 
+            -u
+            -unregister         Unregister the ScheduleJob for this script.
+                                This command required the administrator rights.
 "@
     Write-Host $usage
 }
