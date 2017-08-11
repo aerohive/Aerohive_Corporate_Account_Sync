@@ -13,9 +13,18 @@ param(
     [switch]$doNotCreate,
 
     [Parameter(Mandatory=$false)] 
+    [alias ('register', 'r')]
+    [switch]$registerJob,
+    [Parameter(Mandatory=$false)] 
+    [alias ('unregister', 'u')]
+    [switch]$unregisterJob,
+
+    [Parameter(Mandatory=$false)] 
     [alias ('help', 'h')]
     [switch]$showHelp
 )
+$scriptLocation=$PSScriptRoot
+$scriptName="ad_acs.ps1"
 
 <#--------------------------------------------------------------
 LOAD SETTINGS
@@ -260,7 +269,7 @@ NAME
         Aerohive Corporate Account Sync
 
 SYNOPSIS
-        acas.ps1 [OPTION [WORD]]
+        $scriptName [OPTION [WORD]]
 
 DESCRIPTION
         Aerohive Corporate Account Sync is a PowerShell Script using ACS 
@@ -292,8 +301,42 @@ DESCRIPTION
     Write-Host $usage
 }
 
+######################################################
+######### Register/Unregister the script
+######################################################
 function Register() {
-    Register-ScheduledJob -Name "ACAS" -FilePath C:\Users\Administrator\Desktop\ActiveDirectory_PowerShell_ACS\ad_acs.ps1 -Trigger @{Frequency="Daily"; At="4:00PM"}
+    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
+    if ($id -eq $null){
+        Write-Warning "Do not move the script location once registered."
+        Write-Warning "Currently, the registration process only works from a PowerShell with the adminsitrator rights."
+        $response="x"
+        while ($response -notlike "y" -and $response -notlike "n" ){
+            $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
+        }
+        if ($response -like "y"){
+            $trigger=New-JobTrigger -Daily -at "2:00AM"
+            Register-ScheduledJob -Name "ACAS" -FilePath "$scriptLocation\$scriptName" -Trigger $trigger
+        } else {Write-Host "Nothing done."}
+    } else {
+        Write-Host "This script is already registered."
+        Write-Host "Please unregister is first with the '$scriptName -u' command"
+    }
+}
+function Unregister(){
+    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
+    if ($id -ne $null){
+        $response="x"
+        while ($response -notlike "y" -and $response -notlike "n" ){
+            $response = Read-Host "Do you want to unregister this script (y/n)?"
+        }
+        if ($response -like "y"){
+            Unregister-ScheduledJob -id $id
+            Write-Host "ScheduleJob unregistered."
+            Write-Host Get-ScheduledJob
+        } else {Write-Host "Nothing done."}
+    } else {
+        Write-Host "Not able to find the scheduledJob ACAS."
+    }
 }
 ######################################################
 ######### entry point
@@ -301,6 +344,8 @@ function Register() {
 
 if ($showHelp) {Usage}
 elseif ($testUser) {TestUser}
+elseif ($registerJob) {Register}
+elseif ($unregisterJob) {Unregister}
 else {
     LoadSettings
     LogInfo("Starting process")
