@@ -11,13 +11,18 @@ Edit the settings_example.ini file to configure the script.
 You can also move the settings_example.ini file to settings.ini in the same folder as the script itself. Otherwise, you will have to specify the settings.ini location with the -f flag when running the script.
 
 # Usage
-        SYNOPSIS
-                acas.ps1 [OPTION [WORD]]
+    NAME
+            Aerohive Corporate Account Sync
 
-        DESCRIPTION
-                Aerohive Corporate Account Sync is a PowerShell Script using ACS 
-                APIs to automate the creation of User Accounts on HiveManager NG
-                for domain users.
+    SYNOPSIS
+            acas.ps1 [OPTION [WORD]]
+
+    DESCRIPTION
+            Aerohive Corporate Account Sync is a PowerShell Script using ACS 
+            APIs to automate the creation of User Accounts on HiveManager NG
+            for domain users.
+            THIS SCRIPT IS NOT MODIFYING THE AD USERS! It is just using domain
+            users' information to create User Accounts on HiveManager NG.
 
         options are
                 -h
@@ -32,8 +37,7 @@ You can also move the settings_example.ini file to settings.ini in the same fold
                 -test <ad_user>     Test the AD configuration and display the 
                                     available fields.
 
-                -c
-                -checkOnly          Only check the accounts. When the -c flag is 
-                                    present, the script will not create/remove
-                                    the the account form HiveMaager NG.
-            
+                -a
+                -audit              Audit the AD and ACS users to list differences.
+                                    When the -a flag is present, the script will 
+                                    not create/remove any account.
