@@ -9,7 +9,7 @@ param(
     [string]$testUser,
 
     [Parameter(Mandatory=$false)] 
-    [alias ('checkOnly', 'c')]
+    [alias ('audit', 'a')]
     [switch]$doNotCreate,
 
     [Parameter(Mandatory=$false)] 
@@ -266,28 +266,34 @@ DESCRIPTION
         Aerohive Corporate Account Sync is a PowerShell Script using ACS 
         APIs to automate the creation of User Accounts on HiveManager NG
         for domain users.
+        THIS SCRIPT IS NOT MODIFYING THE AD USERS! It is just using domain
+        users' information to create User Accounts on HiveManager NG.
 
-options are
-        -h
-        -help               This help.
+    options are
+            -h
+            -help               This help.
 
-        -f <file>
-        -file <file>        Path to the configuration file. By default, 
-                            the script will try to find the settings.ini 
-                            file in script location.
+            -f <file>
+            -file <file>        Path to the configuration file. By default, 
+                                the script will try to find the settings.ini 
+                                file in script location.
 
-        -t 
-        -test <ad_user>     Test the AD configuration and display the 
-                            available fields.
+            -t 
+            -test <ad_user>     Test the AD configuration and display the 
+                                available fields.
 
-        -c
-        -checkOnly          Only check the accounts. When the -c flag is 
-                            present, the script will not create/remove
-                            the the account form HiveMaager NG.
-        
+            -a
+            -audit              Audit the AD and ACS users to list differences.
+                                When the -a flag is present, the script will 
+                                not create/remove any account.
+            
 
 "@
     Write-Host $usage
+}
+
+function Register() {
+    Register-ScheduledJob -Name "ACAS" -FilePath C:\Users\Administrator\Desktop\ActiveDirectory_PowerShell_ACS\ad_acs.ps1 -Trigger @{Frequency="Daily"; At="4:00PM"}
 }
 ######################################################
 ######### entry point
