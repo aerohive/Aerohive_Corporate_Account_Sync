@@ -78,6 +78,20 @@ function LoadSettings(){
         Write-Error "Wrong 'logLevel' parameter. Please correct it and start again. Exiting..."
         exit 254
     }
+    try {$script:sendEmailUpdate = [System.Convert]::ToBoolean($params.sendEmailUpdate)}
+    catch {
+        Write-Error "Wrong 'sendEmailUpdate' parameter. Please correct it and start again. Exiting..."
+        exit 254
+    }
+    if ($sendEmailUpdate) {
+        $script:smtpServer=$params.smtpServer
+        $script:smtpUserName=$params.smtpUserName
+        $secpasswd = ConvertTo-SecureString $params.smtpPassword -AsPlainText -Force
+        $script:smtpCreds = New-Object System.Management.Automation.PSCredential ($params.smtpUserName, $secpasswd)
+        $script:smtpTo=$params.smtpTo
+        $script:smtpFrom=$params.smtpFrom
+        $script:smtpSubject=$params.smtpSubject
+    }
 
     $script:headers = @{
         "X-AH-API-CLIENT-SECRET"       = "$clientSecret";
@@ -89,7 +103,14 @@ function LoadSettings(){
 <#--------------------------------------------------------------
 SCRIPT
 --------------------------------------------------------------#>
-
+###############################################################
+######### SCRIPT VARIABLES
+###############################################################
+$adAccountsNumber=0
+$acsAccountsNumber=0
+$createdAccounts=@()
+$deletedAccounts=@()
+$smtpBody=@()
 ###############################################################
 ######### LOGGING
 ###############################################################
@@ -99,6 +120,15 @@ function LogError($mess) {
     $logstring = "$date $time ERROR: $mess"
     if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Red}
+    if ($sendEmailUpdate) {$script:smtpBody += $logstring}
+}
+function LogWarning($mess) {
+    $date = Get-Date -Format d
+    $time = Get-Date -Format HH:mm:ss.fff
+    $logstring = "$date $time WARNING: $mess"
+    if ($logToAFile) {Add-content $logFile -value $logstring}
+    if ($logToConsole) {Write-Host $logstring -ForegroundColor Magenta}
+    if ($sendEmailUpdate) {$script:smtpBody += $logstring}
 }
 function LogInfo ($mess) {
     if ($logLevel -like "debug" -or $logLevel -like "info") {
@@ -107,6 +137,7 @@ function LogInfo ($mess) {
         $logstring = "$date $time INFO: $mess"
         if ($logToAFile) {Add-content $logFile -value $logstring}
         if ($logToConsole) {Write-Host $logstring -ForegroundColor Green}
+        if ($sendEmailUpdate) {$script:smtpBody += $logstring}
     }
 }
 function LogDebug($mess) {
@@ -116,9 +147,32 @@ function LogDebug($mess) {
         $logstring = "$date $time DEBUG: $mess"
         if ($logToAFile) {Add-content $logFile -value $logstring}
         if ($logToConsole) {Write-Host $logstring -ForegroundColor Gray}
+        if ($sendEmailUpdate) {$script:smtpBody += $logstring}
     }
 }
-
+function sendEmailUpdate(){
+    if ($sendEmailUpdate) {
+        $c = $createdAccounts | Out-String
+        $d = $deletedAccounts | Out-String
+        $l = $smtpBody | Out-String
+        $body=@(
+            "Number of user accounts (before changes):",
+            "Windows Domain: $adAccountsNumber", 
+            "Aerohive: $acsAccountsNumber",
+            "",
+            "Created accounts:",
+            $c ,
+            "",
+            "Deleted accounts:",
+            $d,
+            "",
+            "Logs:",
+            $l
+            )
+        $body = $body | Out-String
+        Send-MailMessage -To $smtpTo -From $smtpFrom -Subject $smtpSubject -SMTPServer $smtpServer -Credential $smtpCreds -Body $body
+    }
+}
 ######################################################
 ######### ACS Requests Functions
 ######################################################
@@ -130,6 +184,7 @@ function AcsError($data) {
 function GetUsersFromAcs() {
     try { 
         $response = (Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers -Method Get)
+        $script:acsAccountsNumber = $response.pagination.totalCount
     }
     catch {   
         LogError("Can't retrieve Users from ACS")
@@ -159,6 +214,7 @@ function CreateAcsAccount($adUser) {
         $json = $acsUser | ConvertTo-Json
         try {
             $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId" -Method Post -Headers $headers -Body $json -ContentType "application/json"
+            $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
             LogError("Can't create new User " + $adUser.$acsUserName)
@@ -176,6 +232,7 @@ function DeleteAcsAccount($acsUser) {
         $acsUserId = $acsUser.id
         try {
             $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&ids=$acsUserId" -Method Delete -Headers $headers
+            $script:deletedAccounts += $acsUser.userName
         }
         catch {
             LogError("Can't delete the User " + $acsUser.userName)
@@ -199,7 +256,8 @@ function GetAdGroup(){
 }
 function GetAdGroupMembers($adGroup){
     try {
-        $users = Get-ADGroupMember -Recursive -Identity $adGroupRetrieved        
+        $users = Get-ADGroupMember -Recursive -Identity $adGroupRetrieved 
+        $script:adAccountsNumber = $users.Count       
     } catch {
         LogError "Can't retrieve users from the AD Group $adGroup"
         exit 252
@@ -209,7 +267,7 @@ function GetAdGroupMembers($adGroup){
 function GetUsersFromAd() {
     $adAccounts = @()
     $adGroupRetrieved = GetAdGroup
-    $users =GetAdGroupMembers($adGroupRetrieved)
+    $users = GetAdGroupMembers($adGroupRetrieved)
     foreach ($user in $users) {
         $temp = Get-ADUser -Identity $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone
         if ($temp) { 
@@ -408,9 +466,10 @@ elseif ($testUser) {
 elseif ($registerJob) {Register}
 elseif ($unregisterJob) {Unregister}
 else {
-    if ($doNotCreate) { Write-Warning "Audit Mode!"}
     LoadSettings
+    if ($doNotCreate) { LogWarning("Audit Mode!")}
     LogInfo("Starting process")
     StartProcess
     LogInfo("Process finisehd")
+    sendEmailUpdate
 }
