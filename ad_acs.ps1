@@ -30,7 +30,7 @@ $scriptName="ad_acs.ps1"
 LOAD SETTINGS
 --------------------------------------------------------------#>
 function LoadSettings(){
-    Write-Host "Loading parameters from $configFile"
+    Write-Host "Loading parameters from $($configFile)"
     $params = @{}
     Get-Content $configFile | foreach-object -process {
         $k = [regex]::split($_, '=')
@@ -42,6 +42,9 @@ function LoadSettings(){
     $script:clientSecret = $params.clientSecret
     $script:redirectUrl = $params.redirectUrl
     $script:vpcUrl = $params.vpcUrl
+    if ($params.vpcUrl -like "*.aerohive.com") {
+        $script:cloud = $true
+    } else { $script:cloud = $false}
     $script:accessToken = $params.accessToken
     $script:refreshToken = $params.refreshToken
     $script:expireDate = $params.expireDate
@@ -99,6 +102,7 @@ function LoadSettings(){
         "X-AH-API-CLIENT-REDIRECT-URI" = "$redirectUrl";
         "Authorization"                = "Bearer $accessToken"
     }
+    $script:params = $params
 }
 <#--------------------------------------------------------------
 SCRIPT
@@ -117,7 +121,7 @@ $smtpBody=@()
 function LogError($mess) {
     $date = Get-Date -Format d
     $time = Get-Date -Format HH:mm:ss.fff
-    $logstring = "$date $time ERROR: $mess"
+    $logstring = "$($date) $($time) ERROR: $($mess)"
     if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Red}
     if ($sendEmailUpdate) {$script:smtpBody += $logstring}
@@ -125,7 +129,7 @@ function LogError($mess) {
 function LogWarning($mess) {
     $date = Get-Date -Format d
     $time = Get-Date -Format HH:mm:ss.fff
-    $logstring = "$date $time WARNING: $mess"
+    $logstring = "$($date) $($time) WARNING: $($mess)"
     if ($logToAFile) {Add-content $logFile -value $logstring}
     if ($logToConsole) {Write-Host $logstring -ForegroundColor Magenta}
     if ($sendEmailUpdate) {$script:smtpBody += $logstring}
@@ -134,7 +138,7 @@ function LogInfo ($mess) {
     if ($logLevel -like "debug" -or $logLevel -like "info") {
         $date = Get-Date -Format d
         $time = Get-Date -Format HH:mm:ss.fff
-        $logstring = "$date $time INFO: $mess"
+        $logstring = "$($date) $($time) INFO: $($mess)"
         if ($logToAFile) {Add-content $logFile -value $logstring}
         if ($logToConsole) {Write-Host $logstring -ForegroundColor Green}
         if ($sendEmailUpdate) {$script:smtpBody += $logstring}
@@ -144,7 +148,7 @@ function LogDebug($mess) {
     if ($logLevel -like "debug") {
         $date = Get-Date -Format d
         $time = Get-Date -Format HH:mm:ss.fff
-        $logstring = "$date $time DEBUG: $mess"
+        $logstring = "$($date) $($time) DEBUG: $($mess)"
         if ($logToAFile) {Add-content $logFile -value $logstring}
         if ($logToConsole) {Write-Host $logstring -ForegroundColor Gray}
         if ($sendEmailUpdate) {$script:smtpBody += $logstring}
@@ -157,8 +161,8 @@ function sendEmailUpdate(){
         $l = $smtpBody | Out-String
         $body=@(
             "Number of user accounts (before changes):",
-            "Windows Domain: $adAccountsNumber", 
-            "Aerohive: $acsAccountsNumber",
+            "Windows Domain: $($adAccountsNumber)", 
+            "Aerohive: $($acsAccountsNumber)",
             "",
             "Created accounts:",
             $c ,
@@ -176,17 +180,109 @@ function sendEmailUpdate(){
 ######################################################
 ######### ACS Requests Functions
 ######################################################
+function RefreshAccessToken(){
+    try {
+        LogWarning("ACS Access Token will expire in one week. Refreshing it.")
+        if ($cloud) {
+            $uri = "https://cloud.aerohive.com/services/oauth2/token"
+        } else {
+            $uri = "https://$($vpcUrl)/acct-webapp/services/oauth2/token"
+        }
+        $body = @{
+            "client_secret"=$clientSecret;
+            "client_id"=$clientId;
+            "grant_type"="refresh_token";
+            "refresh_token"=$refreshToken
+        }
+        $response = (Invoke-RestMethod -Uri $uri -Headers @{"Content-Type" = "application/x-www-form-urlencoded"} -Body $body -Method Post)
+        LogInfo("ACS Access Token refreshed. Saving it.")
+    } catch {
+        LogError("Can't refresh ACS Access Token")
+        LogError("Got HTTP$($_.Exception.Response.StatusCode.Value__): $($_.Exception.Response.StatusCode)")
+        $mess = ConvertFrom-Json $_.ErrorDetails.Message
+        LogError("Message: $($mess)")
+        LogError("Exiting...")
+        exit 255
+    }
+    $expiresIn = $response.expires_in
+    $epoch = [int64](([datetime]::UtcNow)-(get-date "1/1/1970")).TotalSeconds
+    $expireDate = $epoch + $expiresIn
+    $settings = @"
+################################################################################
+# application credentials
+# These information 
+################################################################################
+clientId=$($params.clientId)
+clientSecret=$($params.clientSecret)
+redirectUrl=$($params.redirectUrl)
+
+################################################################################
+# ACS account parameters
+################################################################################
+vpcUrl=$($params.vpcUrl)
+accessToken=$($response.access_token)
+refreshToken=$($response.refresh_token)
+expireDate=$($expireDate)
+ownerId=$($params.ownerId)
+
+################################################################################
+# Group settings
+################################################################################
+# AD Group:
+# The script will create a Wi-Fi account for every 
+# user belonging to this Group 
+adGroup=$($params.adGroup)
+# Aerohive User Group Id
+acsUserGroupId=$($params.acsUserGroupId)
+
+################################################################################
+# Credentials delivery
+################################################################################
+# may be 'NO_DELIVERY', 'EMAIL', 'SMS' or 'EMAIL_AND_SMS'
+acsDeliveryMethod=$($params.acsDeliveryMethod)
+
+################################################################################
+# Logging parameters
+################################################################################
+logFile=$($params.logFile)
+# logToAFile may be true or false
+logToAFile=$($params.logToAFile)
+# logToConsole may be true or false
+logToConsole=$($params.logToConsole)
+# logLevel can be debug, info, error
+logLevel=$($params.logLevel)
+################################################################################
+# SMTP parameters
+################################################################################
+sendEmailUpdate=$($params.sendEmailUpdate)
+smtpServer=$($params.smtpServer)
+smtpUserName=$($params.smtpUserName)
+smtpPassword=$($params.smtpPassword)
+smtpTo=$($params.smtpTo)
+smtpFrom=$($params.smtpFrom)
+smtpSubject=$($params.smtpSubject)
+################################################################################
+# AD/Aerohive fields binding
+# Edit these parameters only if you know what you are doing!!!
+################################################################################
+# bindings between ACS and AD parameters
+acsUserName=$($params.acsUserName)
+acsEmail=$($params.acsEmail)
+#AD phone property can be MobilePhone, OfficePhone or HomePhone
+acsPhone=$($params.acsPhone)
+acsOrganization=$($params.acsOrganization)
+"@
+    $settings | Out-File $configFile
+    LogInfo("New ACS Access Token saved successfully.")
+}
 
 function AcsError($data) {
-    LogError("Got HTTP" + $data.error.status + ": " + $data.error.code)
-    LogError("Message: " + $data.error.message)
+    LogError("Got HTTP$($data.error.status): $($data.error.code)")
+    LogError("Message: $($data.error.message)")
 }
 function GetUsersFromAcsPagination($page, $pageSize){
     try { 
-        Write-host $page
-        Write-Host $pageSize
         $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
-        Write-Host $uri
         $response = (Invoke-RestMethod -Uri $uri -Headers $headers -Method Get)
     }
     catch {   
@@ -214,9 +310,9 @@ function GetUsersFromAcs() {
 }
 function CreateAcsAccount($adUser) {
     if ($doNotCreate){
-        LogInfo("CHECK ONLY! The account " + $adUser.$acsUserName + " should be deleted" )
+        LogInfo("CHECK ONLY! The account $($adUser.$acsUserName) should be deleted" )
     } else {
-        LogInfo("Creating " + $adUser.$acsUserName)
+        LogInfo("Creating $($adUser.$acsUserName)")
         $acsUser = @{
             "userName"      = $adUser.$acsUserName;
             "email"         = $adUser.$acsEmail;
@@ -235,7 +331,7 @@ function CreateAcsAccount($adUser) {
             $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
-            LogError("Can't create new User " + $adUser.$acsUserName)
+            LogError("Can't create new User $($adUser.$acsUserName)")
             AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
         }
     }
@@ -244,9 +340,9 @@ function CreateAcsAccount($adUser) {
 
 function DeleteAcsAccount($acsUser) {
     if ($doNotCreate){
-        LogInfo("CHECK ONLY! The account " + $acsUser.userName + " with Id " + $acsUser.id + " should be deleted" )
+        LogInfo("CHECK ONLY! The account $($acsUser.userName) with Id $($acsUser.id) should be deleted" )
     } else {
-        LogInfo("Deleting " + $acsUser.userName + " with Id " + $acsUser.id)
+        LogInfo("Deleting $($acsUser.userName) with Id $($acsUser.id)")
         $acsUserId = $acsUser.id
         try {
             $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&ids=$($acsUserId)"
@@ -254,7 +350,7 @@ function DeleteAcsAccount($acsUser) {
             $script:deletedAccounts += $acsUser.userName
         }
         catch {
-            LogError("Can't delete the User " + $acsUser.userName)
+            LogError("Can't delete the User $($acsUser.userName)")
             AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
         }
         return $response
@@ -268,7 +364,7 @@ function GetAdGroup(){
     try {
         $adGroupRetrieved = Get-ADGroup -filter {name -like $adGroup} 
     } catch {
-        LogError "Can't retrieve the AD Group $adGroup"
+        LogError "Can't retrieve the AD Group $($adGroup)"
         exit 253
     }
     return $adGroupRetrieved
@@ -278,7 +374,7 @@ function GetAdGroupMembers($adGroup){
         $users = Get-ADGroupMember -Recursive -Identity $adGroupRetrieved 
         $script:adAccountsNumber = $users.Count       
     } catch {
-        LogError "Can't retrieve users from the AD Group $adGroup"
+        LogError "Can't retrieve users from the AD Group $($adGroup)"
         exit 252
     }
     return $users
@@ -307,7 +403,7 @@ function TestUser() {
             }
     }
     if (-not $userFound){
-        Write-Host "the user $testUser is not found."
+        Write-Host "the user $($testUser) is not found."
     }
 }
 
@@ -323,7 +419,7 @@ function StartProcess(){
         $acsAccountExists = $false
         foreach ($acsUser in $acsUsers) {
             if ($adUser.$acsUserName -like $acsUser.userName -And $adUser.Enabled -like "False") {
-                $mess = $adUser.$acsUserName + " is disabled. Should be removed"
+                $mess = "$($adUser.$acsUserName) is disabled. Should be removed"
                 LogDebug($mess)
                 DeleteAcsAccount($acsUser)
                 break     
@@ -335,12 +431,12 @@ function StartProcess(){
             } 
         }
         if (-not $acsAccountExists) {
-            $mess = $adUser.$acsUserName + " doesn't have any PPSK. Should be created"
+            $mess = "$($adUser.$acsUserName) doesn't have any PPSK. Should be created"
             LogDebug($mess)
             CreateAcsAccount($adUser)
         }
         else {
-            $mess = $adUser.$acsUserName + " is enabled and already has a PPSK. nothing to do"
+            $mess = "$($adUser.$acsUserName) is enabled and already has a PPSK. nothing to do"
             LogDebug($mess)
         }
         $i++
@@ -352,7 +448,7 @@ function StartProcess(){
     $i = 0
     foreach ($acsUser in $acsUsers) {
         if ( $validAcsUsers -notcontains $acsUser) {
-            $mess = $acsUSer.userName + " should be removed because it does not belong to the AD"
+            $mess = "$($acsUSer.userName) should be removed because it does not belong to the AD"
             LogDebug($mess)
             DeleteAcsAccount($acsUser)
         }
@@ -379,7 +475,7 @@ Currently, the registration process only works from a PowerShell with the admins
         Write-Host ""
         $response="x"
         while ($response -notlike "y"){
-            $response = Read-Host "Do you want to use the settings.ini file $configFile (y/n)?"
+            $response = Read-Host "Do you want to use the settings.ini file $($configFile) (y/n)?"
             if ($response -like 'n'){
                 $fileExists = $false
                 while (-not $fileExists){
@@ -388,7 +484,7 @@ Currently, the registration process only works from a PowerShell with the admins
                         $fileExists=$true
                         Write-Host "File found."
                     } else {
-                        Write-Host "Can't find the file $configFile"
+                        Write-Host "Can't find the file $($configFile)"
                     }
                 }
 
@@ -406,7 +502,7 @@ Currently, the registration process only works from a PowerShell with the admins
         } else {Write-Host "Nothing done."}
     } else {
         Write-Host "This script is already registered."
-        Write-Host "Please unregister is first with the '$scriptName -u' command"
+        Write-Host "Please unregister is first with the '$($scriptName) -u' command"
     }
 }
 function Unregister(){
@@ -486,6 +582,14 @@ elseif ($registerJob) {Register}
 elseif ($unregisterJob) {Unregister}
 else {
     LoadSettings
+    
+    #Deal with access token lifetime
+    $epoch = [int64](([datetime]::UtcNow)-(get-date "1/1/1970")).TotalSeconds
+    $accessTokenRemainingLifetime = $script:expireDate - $epoch
+    #Refresh the access token if it expire in less than 1 week
+    if ($accessTokenRemainingLifetime -le 604800) {
+        RefreshAccessToken
+    }
     if ($doNotCreate) { LogWarning("Audit Mode!")}
     LogInfo("Starting process")
     StartProcess
