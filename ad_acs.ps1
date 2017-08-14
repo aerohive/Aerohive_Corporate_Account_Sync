@@ -29,6 +29,12 @@ $scriptName="ad_acs.ps1"
 <#--------------------------------------------------------------
 LOAD SETTINGS
 --------------------------------------------------------------#>
+function checkEmpty($name, $value){
+    if ($value -like ""){
+        Write-Warning  "'$($name)' parameter can't be null. Please correct it and start again. Exiting..." 
+        exit 255
+    } else {return $value} 
+}
 function LoadSettings(){
     Write-Host "Loading parameters from $($configFile)"
     $params = @{}
@@ -38,22 +44,33 @@ function LoadSettings(){
             $params.Add($k[0], $k[1].Trim().Trim('"').Trim("'")) 
         } 
     }
-    $script:clientId = $params.clientId
-    $script:clientSecret = $params.clientSecret
-    $script:redirectUrl = $params.redirectUrl
-    $script:vpcUrl = $params.vpcUrl
+
+    $script:clientId = checkEmpty "clientId" $params.clientId
+    $script:clientSecret = checkEmpty "clientSecret" $params.clientSecret
+    $script:redirectUrl = checkEmpty "redirectUrl" $params.redirectUrl
+    $script:vpcUrl = checkEmpty "vpcUrl" $params.vpcUrl
     if ($params.vpcUrl -like "*.aerohive.com") {
         $script:cloud = $true
-    } else { $script:cloud = $false}
-    $script:accessToken = $params.accessToken
-    $script:refreshToken = $params.refreshToken
-    $script:expireDate = $params.expireDate
-    $script:ownerId = $params.ownerId
-    $script:acsUserGroupId = $params.acsUserGroupId
-    $script:acsUserName = $params.acsUserName.ToString()
-    $script:acsEmail = $params.acsEmail
-    $script:acsPhone = $params.acsPhone
-    $script:acsOrganization = $params.acsOrganization
+    } else { 
+        $script:cloud = $false
+        try {$validateSslCertificate = [System.Convert]::ToBoolean($params.validateSslCertificate)}
+        catch {
+            Write-Error "Wrong 'validateSslCertificate' parameter. Please correct it and start again. Exiting..."
+            exit 254
+        }
+        if ($validateSslCertificate -like $false) {
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+        }
+    }
+    $script:accessToken = checkEmpty "accessToken" $params.accessToken
+    $script:refreshToken = checkEmpty "refreshToken" $params.refreshToken
+    $script:expireDate = checkEmpty "expireDate" $params.expireDate
+    $script:ownerId = checkEmpty "ownerId" $params.ownerId
+    $script:acsUserGroupId = checkEmpty "acsUserGroupId" $params.acsUserGroupId
+    $script:acsUserName = checkEmpty "acsUserName" $params.acsUserName.ToString()
+    $script:acsEmail = checkEmpty "acsEmail" $params.acsEmail
+    $script:acsPhone = checkEmpty "acsPhone" $params.acsPhone
+    $script:acsOrganization = checkEmpty "acsOrganization" $params.acsOrganization
     if ($params.acsDeliveryMethod -like "NO_DELIVERY" -or 
         $params.acsDeliveryMethod -like "EMAIL" -or
         $params.acsDeliveryMethod -like "SMS" -or
@@ -64,7 +81,7 @@ function LoadSettings(){
         Write-Error "Wrong 'acsDeliveryMethod' parameter. Please correct it and start again. Exiting..."
         exit 254
     }
-    $script:adGroup = $params.adGroup
+    $script:adGroup = checkEmpty "adGroup" $params.adGroup
     $script:logFile = $params.logFile
     try {$script:logToAFile = [System.Convert]::ToBoolean($params.logToAFile)}
     catch {
@@ -87,20 +104,20 @@ function LoadSettings(){
         exit 254
     }
     if ($sendEmailUpdate) {
-        $script:smtpServer=$params.smtpServer
-        $script:smtpUserName=$params.smtpUserName
+        $script:smtpServer=checkEmpty "smtpServer" $params.smtpServer
+        $script:smtpUserName=checkEmpty "smtpUserName" $params.smtpUserName
         $secpasswd = ConvertTo-SecureString $params.smtpPassword -AsPlainText -Force
         $script:smtpCreds = New-Object System.Management.Automation.PSCredential ($params.smtpUserName, $secpasswd)
-        $script:smtpTo=$params.smtpTo
-        $script:smtpFrom=$params.smtpFrom
-        $script:smtpSubject=$params.smtpSubject
+        $script:smtpTo=checkEmpty "smtpTo" $params.smtpTo
+        $script:smtpFrom=checkEmpty "smtpFrom" $params.smtpFrom
+        $script:smtpSubject=checkEmpty "smtpSubject" $params.smtpSubject
     }
 
     $script:headers = @{
-        "X-AH-API-CLIENT-SECRET"       = "$clientSecret";
-        "X-AH-API-CLIENT-ID"           = "$clientId";
-        "X-AH-API-CLIENT-REDIRECT-URI" = "$redirectUrl";
-        "Authorization"                = "Bearer $accessToken"
+        "X-AH-API-CLIENT-SECRET"       = "$($clientSecret)";
+        "X-AH-API-CLIENT-ID"           = "$($clientId)";
+        "X-AH-API-CLIENT-REDIRECT-URI" = "$($redirectUrl)";
+        "Authorization"                = "Bearer $($accessToken)"
     }
     $script:params = $params
 }
@@ -181,6 +198,7 @@ function sendEmailUpdate(){
 ######### ACS Requests Functions
 ######################################################
 function RefreshAccessToken(){
+    
     try {
         LogWarning("ACS Access Token will expire in one week. Refreshing it.")
         if ($cloud) {
@@ -199,31 +217,47 @@ function RefreshAccessToken(){
     } catch {
         LogError("Can't refresh ACS Access Token")
         LogError("Got HTTP$($_.Exception.Response.StatusCode.Value__): $($_.Exception.Response.StatusCode)")
-        $mess = ConvertFrom-Json $_.ErrorDetails.Message
-        LogError("Message: $($mess)")
+        try {
+            $mess = ConvertFrom-Json $_.ErrorDetails.Message
+        } catch {
+            LogError("no message")
+            Write-Host $_
+        }
+        if ($mess -notlike $null){
+            LogError("Message: $($mess)")
+        }
         LogError("Exiting...")
         exit 255
     }
     $expiresIn = $response.expires_in
     $epoch = [int64](([datetime]::UtcNow)-(get-date "1/1/1970")).TotalSeconds
     $expireDate = $epoch + $expiresIn
-    $settings = @"
+    if ($response.access_token -notlike $null -and $response.refresh_token -notlike $null){
+        $settings = @"
 ################################################################################
 # application credentials
-# These information 
+# These information can be retreved from your Aerohive Developer Account
+# at https://developer.aerohive.com
 ################################################################################
 clientId=$($params.clientId)
 clientSecret=$($params.clientSecret)
 redirectUrl=$($params.redirectUrl)
 
 ################################################################################
-# ACS account parameters
+# ACS account parameters 
+# These information can be retrieved from your HMNG account in the 'Global 
+# Settings' section and in the 'About' section
 ################################################################################
+#if you are using HMNG OnPremise, use your HMNG FQDN
 vpcUrl=$($params.vpcUrl)
 accessToken=$($response.access_token)
 refreshToken=$($response.refresh_token)
 expireDate=$($expireDate)
 ownerId=$($params.ownerId)
+#This parameter is only used with HMNG OnPremise
+#Set to "false" it you are using a self signed certificate 
+#or is the station used to execute the script can't valide the SSL certificate
+validateSslCertificate=$($params.validateSslCertificate)
 
 ################################################################################
 # Group settings
@@ -244,9 +278,9 @@ acsDeliveryMethod=$($params.acsDeliveryMethod)
 ################################################################################
 # Logging parameters
 ################################################################################
-logFile=$($params.logFile)
 # logToAFile may be true or false
 logToAFile=$($params.logToAFile)
+logFile=$($params.logFile)
 # logToConsole may be true or false
 logToConsole=$($params.logToConsole)
 # logLevel can be debug, info, error
@@ -268,12 +302,20 @@ smtpSubject=$($params.smtpSubject)
 # bindings between ACS and AD parameters
 acsUserName=$($params.acsUserName)
 acsEmail=$($params.acsEmail)
-#AD phone property can be MobilePhone, OfficePhone or HomePhone
+# AD phone property can be MobilePhone, OfficePhone or HomePhone
+# Be sure to use international phone number if you want to send the 
+# credentials by SMS
 acsPhone=$($params.acsPhone)
 acsOrganization=$($params.acsOrganization)
 "@
-    $settings | Out-File $configFile
-    LogInfo("New ACS Access Token saved successfully.")
+        $settings | Out-File $configFile
+        LogInfo("New ACS Access Token saved successfully.")
+        LogInfo("Reloading settings.")
+        LoadSettings
+    } else {
+        Write-Warning "Refresh token failed. Exiting."
+        exit 254
+    }
 }
 
 function AcsError($data) {
@@ -287,6 +329,7 @@ function GetUsersFromAcsPagination($page, $pageSize){
     }
     catch {   
         LogError("Can't retrieve Users from ACS")
+        Write-Host $_
         AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
         LogError("Exiting...")
         exit 255
