@@ -1,10 +1,10 @@
 ﻿
 param(
-    [Parameter(Mandatory=$false)] 
+    [Parameter(Mandatory=$false, HelpMessage="Path to the configuration file.")] 
     [alias ('file', 'f')]
     [string]$configFile = $PSScriptRoot + "\settings.ini",
 
-    [Parameter(Mandatory=$false)] 
+    [Parameter(Mandatory=$false, HelpMessage="Username to test with the current configuration.")] 
     [alias ('test', 't')]
     [string]$testUser,
 
@@ -188,11 +188,30 @@ function DeleteAcsAccount($acsUser) {
 ######################################################
 ######### AD Requests Functions
 ######################################################
+function GetAdGroup(){
+    try {
+        $adGroupRetrieved = Get-ADGroup -filter {name -like $adGroup} 
+    } catch {
+        LogError "Can't retrieve the AD Group $adGroup"
+        exit 253
+    }
+    return $adGroupRetrieved
+}
+function GetAdGroupMembers($adGroup){
+    try {
+        $users = Get-ADGroupMember -Recursive -Identity $adGroupRetrieved        
+    } catch {
+        LogError "Can't retrieve users from the AD Group $adGroup"
+        exit 252
+    }
+    return $users
+}
 function GetUsersFromAd() {
     $adAccounts = @()
-    $users = Get-ADGroupMember $adGroup -Recursive 
+    $adGroupRetrieved = GetAdGroup
+    $users =GetAdGroupMembers($adGroupRetrieved)
     foreach ($user in $users) {
-        $temp = Get-ADUser $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone
+        $temp = Get-ADUser -Identity $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone
         if ($temp) { 
             $adAccounts += $temp    
         }
@@ -201,11 +220,17 @@ function GetUsersFromAd() {
 }
 
 function TestUser() {
-    $users = Get-ADGroupMember $adGroup -Recursive 
+    $adGroupRetrieved = GetAdGroup
+    $users =GetAdGroupMembers($adGroupRetrieved)
+    $userFound = $false
     foreach ($user in $users){
         if ($user.SamAccountName -like "$testUser") {
-                Get-ADUser $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone
+                $userFound = $true
+                Get-ADUser -Identity $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone 
             }
+    }
+    if (-not $userFound){
+        Write-Host "the user $testUser is not found."
     }
 }
 
@@ -261,6 +286,69 @@ function StartProcess(){
 }
 
 ######################################################
+######### Register/Unregister the script
+######################################################
+function Register() {
+    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
+    if ($id -eq $null){
+        Write-Warning @"
+
+Do not move the script location once registered.
+"@
+        Write-Warning @"
+
+Currently, the registration process only works from a PowerShell with the adminsitrator rights.
+"@
+        Write-Host ""
+        $response="x"
+        while ($response -notlike "y"){
+            $response = Read-Host "Do you want to use the settings.ini file $configFile (y/n)?"
+            if ($response -like 'n'){
+                $fileExists = $false
+                while (-not $fileExists){
+                    $configFile = Read-Host "setting.ini location"
+                    if (Test-Path $configFile) {
+                        $fileExists=$true
+                        Write-Host "File found."
+                    } else {
+                        Write-Host "Can't find the file $configFile"
+                    }
+                }
+
+            }
+        }
+        $response="x"
+        while ($response -notlike "y" -and $response -notlike "n" ){
+            $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
+        }
+        if ($response -like "y"){
+            $trigger=New-JobTrigger -Daily -at "2:00AM"
+            $script = Join-Path $scriptLocation $scriptName
+            $creds = Get-Credential
+            Register-ScheduledJob -Name "ACAS" -FilePath $script -Trigger $trigger -Credential $creds -ArgumentList $configFile
+        } else {Write-Host "Nothing done."}
+    } else {
+        Write-Host "This script is already registered."
+        Write-Host "Please unregister is first with the '$scriptName -u' command"
+    }
+}
+function Unregister(){
+    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
+    if ($id -ne $null){
+        $response="x"
+        while ($response -notlike "y" -and $response -notlike "n" ){
+            $response = Read-Host "Do you want to unregister this script (y/n)?"
+        }
+        if ($response -like "y"){
+            Unregister-ScheduledJob -id $id
+            Write-Host "ScheduleJob unregistered."
+            Write-Host Get-ScheduledJob
+        } else {Write-Host "Nothing done."}
+    } else {
+        Write-Host "Not able to find the scheduledJob ACAS."
+    }
+}
+######################################################
 ######### usage
 ######################################################
 function Usage(){
@@ -309,51 +397,18 @@ DESCRIPTION
 }
 
 ######################################################
-######### Register/Unregister the script
-######################################################
-function Register() {
-    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
-    if ($id -eq $null){
-        Write-Warning "Do not move the script location once registered."
-        Write-Warning "Currently, the registration process only works from a PowerShell with the adminsitrator rights."
-        $response="x"
-        while ($response -notlike "y" -and $response -notlike "n" ){
-            $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
-        }
-        if ($response -like "y"){
-            $trigger=New-JobTrigger -Daily -at "2:00AM"
-            Register-ScheduledJob -Name "ACAS" -FilePath "$scriptLocation\$scriptName" -Trigger $trigger
-        } else {Write-Host "Nothing done."}
-    } else {
-        Write-Host "This script is already registered."
-        Write-Host "Please unregister is first with the '$scriptName -u' command"
-    }
-}
-function Unregister(){
-    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
-    if ($id -ne $null){
-        $response="x"
-        while ($response -notlike "y" -and $response -notlike "n" ){
-            $response = Read-Host "Do you want to unregister this script (y/n)?"
-        }
-        if ($response -like "y"){
-            Unregister-ScheduledJob -id $id
-            Write-Host "ScheduleJob unregistered."
-            Write-Host Get-ScheduledJob
-        } else {Write-Host "Nothing done."}
-    } else {
-        Write-Host "Not able to find the scheduledJob ACAS."
-    }
-}
-######################################################
 ######### entry point
 ######################################################
 
 if ($showHelp) {Usage}
-elseif ($testUser) {TestUser}
+elseif ($testUser) {
+    LoadSettings
+    TestUser
+}
 elseif ($registerJob) {Register}
 elseif ($unregisterJob) {Unregister}
 else {
+    if ($doNotCreate) { Write-Warning "Audit Mode!"}
     LoadSettings
     LogInfo("Starting process")
     StartProcess
