@@ -181,10 +181,13 @@ function AcsError($data) {
     LogError("Got HTTP" + $data.error.status + ": " + $data.error.code)
     LogError("Message: " + $data.error.message)
 }
-function GetUsersFromAcs() {
+function GetUsersFromAcsPagination($page, $pageSize){
     try { 
-        $response = (Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&userGroup=$acsUserGroupId" -Headers $headers -Method Get)
-        $script:acsAccountsNumber = $response.pagination.totalCount
+        Write-host $page
+        Write-Host $pageSize
+        $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
+        Write-Host $uri
+        $response = (Invoke-RestMethod -Uri $uri -Headers $headers -Method Get)
     }
     catch {   
         LogError("Can't retrieve Users from ACS")
@@ -192,9 +195,23 @@ function GetUsersFromAcs() {
         LogError("Exiting...")
         exit 255
     } 
-    return $response.data
+    return $response
 }
-
+function GetUsersFromAcs() {
+    $page=0
+    $pageSize=1000
+    $script:acsAccountsNumber = 0
+    $totalCount = 999
+    $tempAcsAccounts = @()
+    while ($script:acsAccountsNumber -lt $totalCount) {
+        $response = GetUsersFromAcsPagination $page $pageSize
+        $totalCount = $response.pagination.totalCount
+        $script:acsAccountsNumber += $response.pagination.countInPage
+        $tempAcsAccounts += $response.data
+        $page ++
+    }
+    return $tempAcsAccounts
+}
 function CreateAcsAccount($adUser) {
     if ($doNotCreate){
         LogInfo("CHECK ONLY! The account " + $adUser.$acsUserName + " should be deleted" )
@@ -213,7 +230,8 @@ function CreateAcsAccount($adUser) {
         }
         $json = $acsUser | ConvertTo-Json
         try {
-            $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId" -Method Post -Headers $headers -Body $json -ContentType "application/json"
+            $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)"
+            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $json -ContentType "application/json"
             $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
@@ -231,7 +249,8 @@ function DeleteAcsAccount($acsUser) {
         LogInfo("Deleting " + $acsUser.userName + " with Id " + $acsUser.id)
         $acsUserId = $acsUser.id
         try {
-            $response = Invoke-RestMethod -Uri "https://$vpcUrl/xapi/v1/identity/credentials?ownerId=$ownerId&ids=$acsUserId" -Method Delete -Headers $headers
+            $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&ids=$($acsUserId)"
+            $response = Invoke-RestMethod -Uri $uri -Method Delete -Headers $headers
             $script:deletedAccounts += $acsUser.userName
         }
         catch {
