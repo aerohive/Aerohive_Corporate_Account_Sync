@@ -20,6 +20,10 @@ param(
     [switch]$unregisterJob,
 
     [Parameter(Mandatory=$false)] 
+    [alias ('group', 'g')]
+    [switch]$retrieveGroupId,
+
+    [Parameter(Mandatory=$false)] 
     [alias ('help', 'h')]
     [switch]$showHelp
 )
@@ -197,6 +201,31 @@ function sendEmailUpdate(){
 ######################################################
 ######### ACS Requests Functions
 ######################################################
+function RetrieveGroupId(){
+    try {
+        LogInfo("Retrieving Aerohive Group Id.")
+        $uri = "https://$($script:vpcUrl)/xapi/v1/identity/userGroups?ownerId=$($script:ownerId)"
+        $response = Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get
+    } catch {
+        LogError("Can't retrieve User Groups from ACS")
+        try {
+            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
+        } catch {
+            LogError("no message")
+            Write-Host $_
+        }
+        LogError("Exiting...")
+        exit 255
+    } 
+    
+    if ($response.data.userGroups){
+        $t =  $response.data.userGroups
+       $t | Format-Table -AutoSize
+    } else {
+        Write-Host "There is no User Groups here..."
+    }
+}
+
 function RefreshAccessToken(){
     
     try {
@@ -219,12 +248,10 @@ function RefreshAccessToken(){
         LogError("Got HTTP$($_.Exception.Response.StatusCode.Value__): $($_.Exception.Response.StatusCode)")
         try {
             $mess = ConvertFrom-Json $_.ErrorDetails.Message
+            LogError("Message: $($mess)")
         } catch {
             LogError("no message")
             Write-Host $_
-        }
-        if ($mess -notlike $null){
-            LogError("Message: $($mess)")
         }
         LogError("Exiting...")
         exit 255
@@ -323,20 +350,26 @@ function AcsError($data) {
     LogError("Message: $($data.error.message)")
 }
 function GetUsersFromAcsPagination($page, $pageSize){
+    Write-Host "turn $($page)"
     try { 
         $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
-        $response = (Invoke-RestMethod -Uri $uri -Headers $headers -Method Get)
+        $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
     catch {   
         LogError("Can't retrieve Users from ACS")
-        Write-Host $_
-        AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
+        try {
+            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
+        } catch {
+            LogError("no message")
+            Write-Host $_
+        }
         LogError("Exiting...")
         exit 255
     } 
     return $response
 }
 function GetUsersFromAcs() {
+    LogDebug("Retrieving users from ACS.")
     $page=0
     $pageSize=1000
     $script:acsAccountsNumber = 0
@@ -346,9 +379,12 @@ function GetUsersFromAcs() {
         $response = GetUsersFromAcsPagination $page $pageSize
         $totalCount = $response.pagination.totalCount
         $script:acsAccountsNumber += $response.pagination.countInPage
-        $tempAcsAccounts += $response.data
-        $page ++
+        if ($response.date -notlike $null){
+            $tempAcsAccounts += $response.data
+            $page ++
+        } else { exit 10 }
     }
+    LogDebug("$($script:acsAccountsNumber) user(s) retrieved.")
     return $tempAcsAccounts
 }
 function CreateAcsAccount($adUser) {
@@ -375,7 +411,12 @@ function CreateAcsAccount($adUser) {
         }
         catch {
             LogError("Can't create new User $($adUser.$acsUserName)")
-            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
+            try {
+                AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
+            } catch {
+                LogError("no message")
+                Write-Host $_
+            }
         }
     }
     return $response
@@ -394,7 +435,13 @@ function DeleteAcsAccount($acsUser) {
         }
         catch {
             LogError("Can't delete the User $($acsUser.userName)")
-            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)
+            try {
+                AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
+            } catch {
+                LogError("no message")
+                $t = ConvertTo-Json $_
+                Write-Host $t
+            }        
         }
         return $response
     }
@@ -600,6 +647,11 @@ DESCRIPTION
                                 When the -a flag is present, the script will 
                                 not create/remove any account.
             
+            -g
+            -group              List all the available User Groups from ACS. This
+                                can be used to configure the "acsUserGroupId"
+                                parameters from the settings file.
+
             -r
             -register           Register this script as a ScheduleJob. This will
                                 execute the script every day.
@@ -623,6 +675,10 @@ elseif ($testUser) {
 }
 elseif ($registerJob) {Register}
 elseif ($unregisterJob) {Unregister}
+elseif ($retrieveGroupId) {
+    LoadSettings
+    RetrieveGroupId
+}
 else {
     LoadSettings
     
