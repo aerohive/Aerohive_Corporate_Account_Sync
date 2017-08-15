@@ -21,8 +21,8 @@ You can also move the settings_example.ini file to settings.ini in the same fold
             Aerohive Corporate Account Sync is a PowerShell Script using ACS 
             APIs to automate the creation of User Accounts on HiveManager NG
             for domain users.
-            THIS SCRIPT IS NOT MODIFYING THE AD USERS! It is just using domain
-            users' information to create User Accounts on HiveManager NG.
+            THIS SCRIPT IS NOT MODIFYING ANY DOMAIN USERS! It is just using 
+            domain users' information to create User Accounts on HiveManager NG.
 
         options are
                 -h
@@ -41,6 +41,12 @@ You can also move the settings_example.ini file to settings.ini in the same fold
                 -audit                  Audit the AD and ACS users to list differences.
                                         When the -a flag is present, the script will 
                                         not create/remove any account.
+
+                -g
+                -group                  List all the available User Groups from ACS. This
+                                        can be used to configure the "acsUserGroupId"
+                                        parameters from the settings file.
+
                 -r
                 -register               Register this script as a ScheduleJob. This will
                                         execute the script every day.
