@@ -350,7 +350,6 @@ function AcsError($data) {
     LogError("Message: $($data.error.message)")
 }
 function GetUsersFromAcsPagination($page, $pageSize){
-    Write-Host "turn $($page)"
     try { 
         $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
@@ -379,7 +378,7 @@ function GetUsersFromAcs() {
         $response = GetUsersFromAcsPagination $page $pageSize
         $totalCount = $response.pagination.totalCount
         $script:acsAccountsNumber += $response.pagination.countInPage
-        if ($response.date -notlike $null){
+        if ($response.data -notlike $null){
             $tempAcsAccounts += $response.data
             $page ++
         } else { exit 10 }
