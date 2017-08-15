@@ -28,7 +28,7 @@ param(
     [switch]$showHelp
 )
 $scriptLocation=$PSScriptRoot
-$scriptName="ad_acs.ps1"
+$scriptName="acas.ps1"
 
 <#--------------------------------------------------------------
 LOAD SETTINGS
@@ -118,9 +118,9 @@ function LoadSettings(){
     }
 
     $script:headers = @{
-        "X-AH-API-CLIENT-SECRET"       = "$($clientSecret)";
-        "X-AH-API-CLIENT-ID"           = "$($clientId)";
-        "X-AH-API-CLIENT-REDIRECT-URI" = "$($redirectUrl)";
+        "X-AH-API-CLIENT-SECRET"       = "$($script:clientSecret)";
+        "X-AH-API-CLIENT-ID"           = "$($script:clientId)";
+        "X-AH-API-CLIENT-REDIRECT-URI" = "$($script:redirectUrl)";
         "Authorization"                = "Bearer $($accessToken)"
     }
     $script:params = $params
@@ -233,11 +233,11 @@ function RefreshAccessToken(){
         if ($cloud) {
             $uri = "https://cloud.aerohive.com/services/oauth2/token"
         } else {
-            $uri = "https://$($vpcUrl)/acct-webapp/services/oauth2/token"
+            $uri = "https://$($script:vpcUrl)/acct-webapp/services/oauth2/token"
         }
         $body = @{
-            "client_secret"=$clientSecret;
-            "client_id"=$clientId;
+            "client_secret"=$script:clientSecret;
+            "client_id"=$script:clientId;
             "grant_type"="refresh_token";
             "refresh_token"=$refreshToken
         }
@@ -351,7 +351,7 @@ function AcsError($data) {
 }
 function GetUsersFromAcsPagination($page, $pageSize){
     try { 
-        $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
+        $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
     catch {   
@@ -404,8 +404,8 @@ function CreateAcsAccount($adUser) {
         }
         $json = $acsUser | ConvertTo-Json
         try {
-            $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)"
-            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $json -ContentType "application/json"
+            $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)"
+            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $script:headers -Body $json -ContentType "application/json"
             $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
@@ -426,10 +426,10 @@ function DeleteAcsAccount($acsUser) {
         LogInfo("CHECK ONLY! The account $($acsUser.userName) with Id $($acsUser.id) should be deleted" )
     } else {
         LogInfo("Deleting $($acsUser.userName) with Id $($acsUser.id)")
-        $acsUserId = $acsUser.id
+        $script:acsUserId = $acsUser.id
         try {
-            $uri = "https://$($vpcUrl)/xapi/v1/identity/credentials?ownerId=$($ownerId)&ids=$($acsUserId)"
-            $response = Invoke-RestMethod -Uri $uri -Method Delete -Headers $headers
+            $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&ids=$($script:acsUserId)"
+            $response = Invoke-RestMethod -Uri $uri -Method Delete -Headers $script:headers
             $script:deletedAccounts += $acsUser.userName
         }
         catch {
