@@ -144,6 +144,7 @@ $script:adAccountsNumber=0
 $script:acsAccountsNumber=0
 $script:createdAccounts=@()
 $script:deletedAccounts=@()
+$script:failedAccounts=@()
 $script:smtpBody=@()
 ###############################################################
 ######### LOGGING
@@ -188,41 +189,59 @@ function sendEmailUpdate(){
     if ($script:sendEmailUpdate) {
         $c = $script:createdAccounts | Out-String
         $d = $script:deletedAccounts | Out-String
+        $f = $script:failedAccounts | Out-String
         $l = $script:smtpBody | Out-String
         $body=@(
             "Number of user accounts (before changes):",
             "Windows Domain: $($script:adAccountsNumber)", 
             "Aerohive: $($script:acsAccountsNumber)",
             "",
-            "Created accounts:",
+            "$($script:createdAccounts.Count) account(s) created:",
             $c ,
             "",
-            "Deleted accounts:",
+            "$($script:deletedAccounts.Count) account(s) deleted:",
             $d,
+            "",
+            "$($script:failedAccounts.Count) creation/deletion failed:",
+            $f,
             "",
             "Logs:",
             $l
             )
         $body = $body | Out-String
-        Send-MailMessage -To $script:smtpTo -From $script:smtpFrom -Subject $script:smtpSubject -SMTPServer $script:smtpServer -Credential $script:smtpCreds -Body $body
+        try {
+            Send-MailMessage -To $script:smtpTo -From $script:smtpFrom -Subject $script:smtpSubject -SMTPServer $script:smtpServer -Credential $script:smtpCreds -Body $body
+            LogInfo("Email sent to $($script:smtpTo)")            
+        } catch {
+            LogError("Can't send email to $($script:smtpTo)")
+        }
     }
 }
 ######################################################
 ######### ACS Requests Functions
 ######################################################
-function RetrieveGroupId(){
+function AcsRetrieveErrorBody($e){
+    try {
+        $result = $e.Exception.Response.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($result)
+        $reader.BaseStream.Position = 0
+        $reader.DiscardBufferedData()
+        $responseBody = $reader.ReadToEnd();
+        $response = ConvertFrom-Json $responseBody
+    } catch {
+        $response = @{"error"= @{"message"="Not able to retrieve the message from the server..."}}
+    }
+    return $response
+}
+
+function AcsRetrieveGroupId(){
     LogInfo("Retrieving Aerohive Group Id.")
     try {
         $uri = "https://$($script:vpcUrl)/xapi/v1/identity/userGroups?ownerId=$($script:ownerId)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     } catch {
-        $err = $_
         LogError("Can't retrieve User Groups from ACS")
-        try {
-            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
-        } catch {
-            LogError($err)
-        }
+        AcsError($_)     
         LogError("Exiting...")
         exit 255
     } 
@@ -235,7 +254,7 @@ function RetrieveGroupId(){
     }
 }
 
-function RefreshAccessToken(){
+function AcsRefreshAccessToken(){
     #Deal with access token lifetime
     $epoch = [int64](([datetime]::UtcNow)-(get-date "1/1/1970")).TotalSeconds
     $accessTokenRemainingLifetime = $script:expireDate - $epoch
@@ -302,29 +321,29 @@ $($newLine.trim())
     }
 }
 
-function AcsError($data) {
-    LogError("Got HTTP$($data.error.status): $($data.error.code)")
-    LogError("Message: $($data.error.message)")
+function AcsError($e) {
+    $err = AcsRetrieveErrorBody($e)
+    try {    
+        LogError("Got HTTP$($e.Exception.Response.StatusCode.value__): $($e.Exception.Response.StatusCode)")
+        LogError("Message: $($err.error.message)")           
+    } catch {
+        LogError($err)
+    }
 }
-function GetUsersFromAcsPagination($page, $pageSize){
+function AcsGetUsersWithPagination($page, $pageSize){
     try { 
         $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
     catch {   
-        $err = $_
         LogError("Can't retrieve Users from ACS")
-        try {
-            AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
-        } catch {
-            LogError($err)
-        }
+        AcsError($_)     
         LogError("Exiting...")
         exit 255
     } 
     return $response
 }
-function GetUsersFromAcs() {
+function AcsGetUsers() {
     LogDebug("Retrieving users from ACS.")
     $page=0
     $pageSize=1000
@@ -332,7 +351,7 @@ function GetUsersFromAcs() {
     $totalCount = 999
     $tempAcsAccounts = @()
     while ($script:acsAccountsNumber -lt $totalCount) {
-        $response = GetUsersFromAcsPagination $page $pageSize
+        $response = AcsGetUsersWithPagination $page $pageSize
         $totalCount = $response.pagination.totalCount
         $script:acsAccountsNumber += $response.pagination.countInPage
         if ($response.data -notlike $null){
@@ -345,7 +364,7 @@ function GetUsersFromAcs() {
     LogDebug("$($script:acsAccountsNumber) user(s) retrieved.")
     return $tempAcsAccounts
 }
-function CreateAcsAccount($adUser) {
+function AcsCreateAccount($adUser) {
     if ($doNotCreate){
         LogInfo("CHECK ONLY! The account $($adUser.$acsUserName) should be deleted" )
     } else {
@@ -364,23 +383,19 @@ function CreateAcsAccount($adUser) {
         $json = $acsUser | ConvertTo-Json
         try {
             $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)"
-            $response = (Invoke-RestMethod -Uri $uri -Method Post -Headers $script:headers -Body $json -ContentType "application/json")
+            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $script:headers -Body $json -ContentType "application/json"
             $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
-            $err = $_
-            LogError("Can't create new User $($adUser.$acsUserName)")
-            try {
-                AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
-            } catch {
-                LogError($err)
-            }
+            LogError("Can't create new user $($adUser.$acsUserName)")
+            $script:failedAccounts += "Creation of user $($adUser.$acsUserName) failed"
+            AcsError($_)            
         }
     }
     return $response
 }
 
-function DeleteAcsAccount($acsUser) {
+function AcsDeleteAccount($acsUser) {
     if ($doNotCreate){
         LogInfo("CHECK ONLY! The account $($acsUser.userName) with Id $($acsUser.id) should be deleted" )
     } else {
@@ -392,13 +407,9 @@ function DeleteAcsAccount($acsUser) {
             $script:deletedAccounts += $acsUser.userName
         }
         catch {
-            $err = $_
             LogError("Can't delete the User $($acsUser.userName)")
-            try {
-                AcsError(ConvertFrom-Json $_.ErrorDetails.Message)            
-            } catch {
-                LogError($err)
-            }        
+            $script:failedAccounts += "Deletion of user $($acsUser.userName) failed"
+            AcsError($_)      
         }
         return $response
     }
@@ -407,7 +418,7 @@ function DeleteAcsAccount($acsUser) {
 ######################################################
 ######### AD Requests Functions
 ######################################################
-function GetAdGroup(){
+function AdGetUserGroups(){
     try {
         $adGroupRetrieved = Get-ADGroup -filter {name -like $adGroup} 
     } catch {
@@ -416,7 +427,7 @@ function GetAdGroup(){
     }
     return $adGroupRetrieved
 }
-function GetAdGroupMembers($adGroup){
+function AdGetGroupMembers($adGroup){
     try {
         $users = Get-ADGroupMember -Recursive -Identity $adGroupRetrieved 
         $script:adAccountsNumber = $users.Count       
@@ -426,10 +437,10 @@ function GetAdGroupMembers($adGroup){
     }
     return $users
 }
-function GetUsersFromAd() {
+function AdGetUsers() {
     $adAccounts = @()
-    $adGroupRetrieved = GetAdGroup
-    $users = GetAdGroupMembers($adGroupRetrieved)
+    $adGroupRetrieved = AdGetUserGroups
+    $users = AdGetGroupMembers($adGroupRetrieved)
     foreach ($user in $users) {
         $temp = Get-ADUser -Identity $user.SamAccountName -Properties $acsUserName, $acsEmail, $acsOrganization, $acsPhone
         if ($temp) { 
@@ -440,8 +451,8 @@ function GetUsersFromAd() {
 }
 
 function TestUser() {
-    $adGroupRetrieved = GetAdGroup
-    $users =GetAdGroupMembers($adGroupRetrieved)
+    $adGroupRetrieved = AdGetUserGroups
+    $users =AdGetGroupMembers($adGroupRetrieved)
     $userFound = $false
     foreach ($user in $users){
         if ($user.SamAccountName -like "$testUser") {
@@ -458,8 +469,8 @@ function TestUser() {
 ######### start process
 ######################################################
 function StartProcess(){
-    $acsUsers = GetUsersFromAcs
-    $adUsers = GetUsersFromAd
+    $acsUsers = AcsGetUsers
+    $adUsers = AdGetUsers
     $validAcsUsers = @()
     $i = 0
     foreach ($adUser in $adUsers) {
@@ -468,7 +479,7 @@ function StartProcess(){
             if ($adUser.$acsUserName -like $acsUser.userName -And $adUser.Enabled -like "False") {
                 $mess = "$($adUser.$acsUserName) is disabled. Should be removed"
                 LogDebug($mess)
-                DeleteAcsAccount($acsUser)
+                AcsDeleteAccount($acsUser)
                 break     
             }
             elseif ($adUser.$acsUserName -like $acsUser.userName -And $adUser.Enabled -like "True") {
@@ -480,7 +491,7 @@ function StartProcess(){
         if (-not $acsAccountExists) {
             $mess = "$($adUser.$acsUserName) doesn't have any PPSK. Should be created"
             LogDebug($mess)
-            CreateAcsAccount($adUser)
+            AcsCreateAccount($adUser)
         }
         else {
             $mess = "$($adUser.$acsUserName) is enabled and already has a PPSK. nothing to do"
@@ -497,7 +508,7 @@ function StartProcess(){
         if ( $validAcsUsers -notcontains $acsUser) {
             $mess = "$($acsUSer.userName) should be removed because it does not belong to the AD"
             LogDebug($mess)
-            DeleteAcsAccount($acsUser)
+            AcsDeleteAccount($acsUser)
         }
         $i++
         $percentage = (($i / $acsUsers.length) * 100)
@@ -634,12 +645,12 @@ elseif ($registerJob) {Register}
 elseif ($unregisterJob) {Unregister}
 elseif ($retrieveGroupId) {
     LoadSettings
-    RefreshAccessToken
-    RetrieveGroupId
+    AcsRefreshAccessToken
+    AcsRetrieveGroupId
 }
 else {
     LoadSettings
-    RefreshAccessToken
+    AcsRefreshAccessToken
     if ($doNotCreate) { LogWarning("Audit Mode!")}
     LogInfo("Starting process")
     StartProcess
