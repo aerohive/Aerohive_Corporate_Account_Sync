@@ -95,6 +95,7 @@ function LoadSettings(){
     }
 
 
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
     if ($script:vpcUrl -like "*.aerohive.com") {
         $script:cloud = $true
     } else { 
@@ -103,7 +104,6 @@ function LoadSettings(){
             [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
         }
     }
-
     if ($script:sendEmailUpdate) {
         $script:smtpServer=checkEmpty "smtpServer" $script:smtpServer
         $script:smtpUserName=checkEmpty "smtpUserName" $script:smtpUserName
@@ -298,6 +298,7 @@ function AcsError($data) {
 }
 function GetUsersFromAcsPagination($page, $pageSize){
     try { 
+
         $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
