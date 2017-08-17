@@ -94,14 +94,24 @@ function LoadSettings(){
         }
     }
 
-
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+    
     if ($script:vpcUrl -like "*.aerohive.com") {
         $script:cloud = $true
     } else { 
         $script:cloud = $false
         if ($validateSslCertificate -like $false -and $validateSslCertificate -notlike $null) {
-            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+            add-type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCertsPolicy : ICertificatePolicy {
+    public bool CheckValidationResult(
+        ServicePoint srvPoint, X509Certificate certificate,
+        WebRequest request, int certificateProblem) {
+        return true;
+    }
+}
+"@
+        [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy         
         }
     }
     if ($script:sendEmailUpdate) {
@@ -204,7 +214,7 @@ function RetrieveGroupId(){
     LogInfo("Retrieving Aerohive Group Id.")
     try {
         $uri = "https://$($script:vpcUrl)/xapi/v1/identity/userGroups?ownerId=$($script:ownerId)"
-        $response = Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get 
+        $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     } catch {
         $err = $_
         LogError("Can't retrieve User Groups from ACS")
@@ -298,7 +308,6 @@ function AcsError($data) {
 }
 function GetUsersFromAcsPagination($page, $pageSize){
     try { 
-
         $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
@@ -329,6 +338,8 @@ function GetUsersFromAcs() {
         if ($response.data -notlike $null){
             $tempAcsAccounts += $response.data
             $page ++
+        } elseif ($response.pagination.totalCount -like 0){
+            $totalCount = 0
         } else { exit 10 }
     }
     LogDebug("$($script:acsAccountsNumber) user(s) retrieved.")
@@ -353,7 +364,7 @@ function CreateAcsAccount($adUser) {
         $json = $acsUser | ConvertTo-Json
         try {
             $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)"
-            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $script:headers -Body $json -ContentType "application/json"
+            $response = (Invoke-RestMethod -Uri $uri -Method Post -Headers $script:headers -Body $json -ContentType "application/json")
             $script:createdAccounts += $adUser.$acsUserName
         }
         catch {
@@ -377,7 +388,7 @@ function DeleteAcsAccount($acsUser) {
         $script:acsUserId = $acsUser.id
         try {
             $uri = "https://$($script:vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:ownerId)&ids=$($script:acsUserId)"
-            $response = Invoke-RestMethod -Uri $uri -Method Delete -Headers $script:headers
+            $response = (Invoke-RestMethod -Uri $uri -Method Delete -Headers $script:headers)
             $script:deletedAccounts += $acsUser.userName
         }
         catch {
