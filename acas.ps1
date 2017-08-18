@@ -611,7 +611,7 @@ Currently, the registration process only works from a PowerShell with the admins
             $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
         }
         if ($response -like "y") {
-            $trigger = New-JobTrigger -Daily -at "2:00AM"
+            $trigger = New-JobTrigger -Daily -at "2:00AM" -DaysInterval 1
             $scriptPath = Join-Path $scriptLocation $scriptName
             $creds = Get-Credential
             Register-ScheduledJob -Name "ACAS" -FilePath $scriptPath -Trigger $trigger -Credential $creds -ArgumentList $configFile
@@ -619,8 +619,10 @@ Currently, the registration process only works from a PowerShell with the admins
         else {Write-Host "Nothing done."}
     }
     else {
-        Write-Host "This script is already registered."
-        Write-Host "Please unregister is first with the '$($scriptName) -u' command"
+        Write-Warning "This script is already registered."
+        Write-Warning "Please unregister it first with the '$($scriptName) -u' command"
+        Write-Host ""
+        Get-ScheduledJob $id
     }
 }
 function Unregister() {
