@@ -409,7 +409,7 @@ function AcsGetUsers() {
             exit 10 
         }
     }
-    LogDebug("$($script:acsAccountsNumber) user(s) retrieved.")
+    LogDebug("$($script:acsAccountsNumber) user(s) retrieved from ACS.")
     return $tempAcsAccounts
 }
 function AcsCreateAccount($adUser) {
@@ -491,6 +491,7 @@ function AdGetGroupMembers($adGroup) {
         sendEmailUpdate
         exit 252
     }
+    LogDebug("$($script:adAccountsNumber) user(s) retrieved from AD.")
     return $users
 }
 function AdGetUsers() {
