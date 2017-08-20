@@ -67,7 +67,7 @@ function LoadSettings() {
             "clientSecret" {$script:params.clientSecret = CheckEmpty "clientSecret" $k[1]}
             "redirectUrl" {$script:params.redirectUrl = CheckEmpty "redirectUrl" $k[1]}
             "vpcUrl" {$script:params.vpcUrl = CheckEmpty "vpcUrl" $k[1]}
-            "validateSslCertificate" {$script:params.validateSslCertificate = CheckBool "validateSslCertificate" $k[1]}
+            "validateSslCertificate" {$validateSslCertificate = CheckBool "validateSslCertificate" $k[1]}
             "accessToken" {$script:params.accessToken = CheckEmpty "accessToken" $k[1]}
             "refreshToken" {$script:params.refreshToken = CheckEmpty "refreshToken" $k[1]}
             "expireDate" {$script:params.expireDate = CheckEmpty "expireDate" $k[1]}
@@ -114,7 +114,7 @@ function LoadSettings() {
     }
     else { 
         $script:cloud = $false  
-        if ($validateSslCertificate -like $false -and $validateSslCertificate -notlike $null) {
+        if ($validateSslCertificate -like $false) {
             add-type @"
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
@@ -126,7 +126,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
 }
 "@
-            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy         
+            [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy  
         }
     }
     if ($script:params.sendEmailUpdate) {
@@ -363,13 +363,22 @@ function AcsRefreshAccessToken() {
     }
 }
 function AcsError($e) {
-    $err = AcsRetrieveErrorBody($e)
-    try {    
-        LogError("Got HTTP$($e.Exception.Response.StatusCode.value__): $($e.Exception.Response.StatusCode)")
-        LogError("Message: $($err.error.message)")           
-    }
-    catch {
-        LogError($err)
+    if ($e.Exception.Response -like $null){
+        try {    
+            LogError("$($e.Exception.Message)")           
+        }
+        catch {
+            LogError($err)
+        }  
+    } else {
+        $err = AcsRetrieveErrorBody($e)
+        try {    
+            LogError("Got HTTP$($e.Exception.Response.StatusCode.value__): $($e.Exception.Response.StatusCode)")
+            LogError("Message: $($err.error.message)")           
+        }
+        catch {
+            LogError($err)
+        }
     }
 }
 function AcsGetUsersWithPagination($page, $pageSize) {
@@ -378,8 +387,9 @@ function AcsGetUsersWithPagination($page, $pageSize) {
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
     catch {   
+        $err = $_
         LogError("Can't retrieve Users from ACS")
-        AcsError($_)     
+        AcsError($err)     
         LogError("Exiting...")
         sendEmailUpdate
         exit 255
