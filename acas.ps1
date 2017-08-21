@@ -43,14 +43,16 @@ $script:params = @{}
 <#--------------------------------------------------------------
 LOAD SETTINGS
 --------------------------------------------------------------#>
-function CheckEmpty($name, $value) {
+function CheckEmpty($name, $line) {
+    $value = $line.replace("$($name)=","")
     if ($value -like "" -or $value -like $null) {
         Write-Warning  "'$($name)' parameter can't be null. Please correct it and start again. Exiting..." 
         exit 255
     }
     else { return $value.Trim().Trim('"').Trim("'") } 
 }
-function CheckBool($name, $value) {
+function CheckBool($name, $line) {
+    $value = $line.replace("$($name)=","")
     try {$bool = [System.Convert]::ToBoolean($value)}
     catch {
         Write-Error "The only accepted values for the parameter '$($name)' are 'true' or 'false' . Please correct it and start again. Exiting..."
@@ -61,50 +63,53 @@ function CheckBool($name, $value) {
 function LoadSettings() {
     Write-Host "Loading parameters from $($configFile)"
     Get-Content $configFile | foreach-object -process {
-        $k = [regex]::split($_, '=')
-        switch ($k[0]) {
-            "clientId" {$script:params.clientId = CheckEmpty "clientId" $k[1]}
-            "clientSecret" {$script:params.clientSecret = CheckEmpty "clientSecret" $k[1]}
-            "redirectUrl" {$script:params.redirectUrl = CheckEmpty "redirectUrl" $k[1]}
-            "vpcUrl" {$script:params.vpcUrl = CheckEmpty "vpcUrl" $k[1]}
-            "validateSslCertificate" {$validateSslCertificate = CheckBool "validateSslCertificate" $k[1]}
-            "accessToken" {$script:params.accessToken = CheckEmpty "accessToken" $k[1]}
-            "refreshToken" {$script:params.refreshToken = CheckEmpty "refreshToken" $k[1]}
-            "expireDate" {$script:params.expireDate = CheckEmpty "expireDate" $k[1]}
-            "ownerId" {$script:params.ownerId = CheckEmpty "ownerId" $k[1]}
-            "acsUserGroupId" {$script:params.acsUserGroupId = CheckEmpty "acsUserGroupId" $k[1]}
-            "acsUserName" {$script:params.acsUserName = CheckEmpty "acsUserName" $k[1]}
-            "acsEmail" {$script:params.acsEmail = CheckEmpty "acsEmail" $k[1]}
-            "acsPhone" {$script:params.acsPhone = CheckEmpty "acsPhone" $k[1]}
-            "acsOrganization" {$script:params.acsOrganization = CheckEmpty "acsOrganization" $k[1]}
-            "acsDeliveryMethod" {
-                if ($k[1] -like "NO_DELIVERY" -or $k[1] -like "EMAIL" -or $k[1] -like "SMS" -or $k[1] -like "EMAIL_AND_SMS") {
-                    $script:params.acsDeliveryMethod = $k[1]
+        $line = [regex]::split($_, '#')[0].Trim()
+        switch -wildcard ($line) {
+            "clientId=*" {$script:params.clientId = CheckEmpty "clientId" $line}
+            "clientSecret=*" {$script:params.clientSecret = CheckEmpty "clientSecret" $line}
+            "redirectUrl=*" {$script:params.redirectUrl = CheckEmpty "redirectUrl" $line}
+            "vpcUrl=*" {$script:params.vpcUrl = CheckEmpty "vpcUrl" $line}
+            "validateSslCertificate=*" {$validateSslCertificate = CheckBool "validateSslCertificate" $line}
+            "accessToken=*" {$script:params.accessToken = CheckEmpty "accessToken" $line}
+            "refreshToken=*" {$script:params.refreshToken = CheckEmpty "refreshToken" $line}
+            "expireDate=*" {$script:params.expireDate = CheckEmpty "expireDate" $line}
+            "ownerId=*" {$script:params.ownerId = CheckEmpty "ownerId" $line}
+            "acsUserGroupId=*" {$script:params.acsUserGroupId = CheckEmpty "acsUserGroupId" $line}
+            "acsUserName=*" {$script:params.acsUserName = CheckEmpty "acsUserName" $line}
+            "acsEmail=*" {$script:params.acsEmail = CheckEmpty "acsEmail" $line}
+            "acsPhone=*" {$script:params.acsPhone = CheckEmpty "acsPhone" $line}
+            "acsOrganization=*" {$script:params.acsOrganization = CheckEmpty "acsOrganization" $line}
+            "acsDeliveryMethod=*" {
+                $value = $line.replace("acsDeliveryMethod=","")
+                if ($value -like "NO_DELIVERY" -or $value -like "EMAIL" -or $value -like "SMS" -or $value -like "EMAIL_AND_SMS") {
+                    $script:params.acsDeliveryMethod = $value
                 }
                 else {
                     Write-Error "Wrong 'acsDeliveryMethod' parameter. Please correct it and start again. Exiting..."
                     exit 254
                 }
             }
-            "adGroup" {$script:params.adGroup = CheckEmpty "adGroup" $k[1]}
-            "logToAFile" {$script:params.logToAFile = CheckBool "logToAFile" $k[1]}
-            "logFile" {$script:params.logFile = $k[1]}
-            "logToConsole" {$script:params.logToConsole = CheckBool "logToConsole" $k[1]}
-            "logLevel" {
-                if ($k[1] -like "debug" -or $k[1] -like "info" -or $k[1] -like "error") {$script:params.logLevel = $k[1]}
+            "adGroup=*" {$script:params.adGroup = CheckEmpty "adGroup" $line}
+            "logToAFile=*" {$script:params.logToAFile = CheckBool "logToAFile" $line}
+            "logFile=*" {$script:params.logFile = $line.replace("logFile=","")}
+            "logToConsole=*" {$script:params.logToConsole = CheckBool "logToConsole" $line}
+            "logLevel=*" {
+                $value = $line.replace("logLevel=","")
+                if ($value -like "debug" -or $value -like "info" -or $value -like "error") {$script:params.logLevel = $value}
                 else {
                     Write-Error "Wrong 'logLevel' parameter. Please correct it and start again. Exiting..."
                     exit 254
                 }
             }
-            "sendEmailUpdate" {$script:params.sendEmailUpdate = CheckBool "sendEmailUpdate" $k[1]}
-            "smtpServer" {$script:params.smtpServer = $k[1]}
-            "smtpUserName" {$script:params.smtpUserName = $k[1]}
-            "smtpPassword" {$smtpPassword = $k[1]}
-            "smtpSecPassword" {$script:params.smtpSecPassword = $k[1]}
-            "smtpTo" {$script:params.smtpTo = $k[1]}
-            "smtpFrom" {$script:params.smtpFrom = $k[1]}
-            "smtpSubject" {$script:params.smtpSubject = $k[1]}
+            "sendEmailUpdate=*" {$script:params.sendEmailUpdate = CheckBool "sendEmailUpdate" $line}
+            "smtpServer=*" {$script:params.smtpServer = $line.replace("smtpServer=","")}
+            "smtpUserName=*" {$script:params.smtpUserName = $line.replace("smtpUserName=","")}
+            "smtpPassword=*" {$smtpPassword = $line.replace("smtpPassword=","")}
+            "smtpSecPassword=*" {$script:params.smtpSecPassword = $line.replace("smtpSecPassword=","")}
+            "key=*" {$script:params.key = $line.replace("key=","")}
+            "smtpTo=*" {$script:params.smtpTo = $line.replace("smtpTo=","")}
+            "smtpFrom=*" {$script:params.smtpFrom = $line.replace("smtpFrom=","")}
+            "smtpSubject=*" {$script:params.smtpSubject = $line.replace("smtpSubject=","")}
         }
     }
 
@@ -130,21 +135,31 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
         }
     }
     if ($script:params.sendEmailUpdate) {
-        if ($script:params.smtpSecPassword -like $null){
+        if ($script:params.smtpSecPassword -like $null) {
             try {
-                $script:params.smtpSecPassword = ConvertTo-SecureString $smtpPassword -AsPlainText -Force -SecureKey  | ConvertFrom-SecureString
+                $script:params.key = New-Object Byte[] 16   # You can use 16, 24, or 32 for AES
+                [Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($script:params.key)
+                $script:params.smtpSecPassword = ConvertTo-SecureString $smtpPassword -AsPlainText -Force | ConvertFrom-SecureString -key $script:params.key
             }
             catch {
+                $_
                 LogError("It seems the 'smtpPassword' parameter is misconfigured. Please correct it and start again. ")
                 exit 250
             }
+            $script:params.key = [System.Convert]::ToBase64String($script:params.key)
             SaveSettings
-        } else {
-            $script:params.smtpSecPassword = ConvertTo-SecureString $script:params.smtpSecPassword
+        }
+        else {
+            try {
+                $script:params.key = [System.Convert]::FromBase64String($script:params.key)
+                $script:params.smtpSecPassword = ConvertTo-SecureString -String $script:params.smtpSecPassword -key $script:params.key
+
+            }
+            catch {LogDebug($_)}
         }
         $script:params.smtpServer = CheckEmpty "smtpServer" $script:params.smtpServer
         $script:params.smtpUserName = CheckEmpty "smtpUserName" $script:params.smtpUserName
-        $script:smtpCreds = New-Object System.Management.Automation.PSCredential ($script:params.smtpUserName, $script:params.smtpSecPassword)
+        $script:params.smtpCreds = New-Object System.Management.Automation.PSCredential ($script:params.smtpUserName, $script:params.smtpSecPassword)
         $script:params.smtpTo = CheckEmpty "smtpTo" $script:params.smtpTo
         $script:params.smtpFrom = CheckEmpty "smtpFrom" $script:params.smtpFrom
         $script:params.smtpSubject = CheckEmpty "smtpSubject" $script:params.smtpSubject
@@ -165,7 +180,7 @@ function SaveSettings() {
     $settings = @()
     $settingsList = "clientId", "clientSecret", "redirectUrl", "vpcUrl", "accessToken", "refreshToken", "expireDate", "ownerId", "acsUserGroupId", "acsUserName", 
     "acsEmail", "acsPhone", "acsOrganization", "acsDeliveryMethod", "adGroup", "logToAFile", "logFile", "logToConsole", "logLevel", "sendEmailUpdate", "smtpServer", 
-    "smtpUserName", "smtpPassword", "smtpSecPassword", "smtpTo", "smtpFrom", "smtpSubject"
+    "smtpUserName", "smtpPassword", "smtpSecPassword", "key", "smtpTo", "smtpFrom", "smtpSubject"
     Get-Content $configFile | foreach-object -process {
         $line = $_
         $k = [regex]::split($line, '=')
@@ -236,7 +251,7 @@ function LogDebug($mess) {
         if ($script:params.sendEmailUpdate) {$script:smtpBody += $logstring}
     }
 }
-function sendEmailUpdate() {
+function SendEmailUpdate() {
     if ($script:params.sendEmailUpdate) {
         $c = $script:createdAccounts | Out-String
         $d = $script:deletedAccounts | Out-String
@@ -261,7 +276,7 @@ function sendEmailUpdate() {
         )
         $body = $body | Out-String
         try {
-            Send-MailMessage -To $script:params.smtpTo -From $script:params.smtpFrom -Subject $script:params.smtpSubject -SMTPServer $script:params.smtpServer -Credential $script:smtpCreds -Body $body
+            Send-MailMessage -To $script:params.smtpTo -From $script:params.smtpFrom -Subject $script:params.smtpSubject -SMTPServer $script:params.smtpServer -Credential $script:params.smtpCreds -Body $body
             LogInfo("Email sent to $($script:params.smtpTo)")            
         }
         catch {
@@ -296,7 +311,7 @@ function AcsRetrieveGroupId() {
         LogError("Can't retrieve User Groups from ACS")
         AcsError($_)     
         LogError("Exiting...")
-        sendEmailUpdate
+        SendEmailUpdate
         exit 255
     } 
     
@@ -343,7 +358,7 @@ function AcsRefreshAccessToken() {
                 LogError($err)
             }
             LogError("Exiting...")
-            sendEmailUpdate
+            SendEmailUpdate
             exit 255
         }
         $expiresIn = $response.expires_in
@@ -357,20 +372,21 @@ function AcsRefreshAccessToken() {
         }
         else {
             Write-Warning "Refresh token failed. Exiting."
-            sendEmailUpdate
+            SendEmailUpdate
             exit 254
         }
     }
 }
 function AcsError($e) {
-    if ($e.Exception.Response -like $null){
+    if ($e.Exception.Response -like $null) {
         try {    
             LogError("$($e.Exception.Message)")           
         }
         catch {
             LogError($err)
         }  
-    } else {
+    }
+    else {
         $err = AcsRetrieveErrorBody($e)
         try {    
             LogError("Got HTTP$($e.Exception.Response.StatusCode.value__): $($e.Exception.Response.StatusCode)")
@@ -391,7 +407,7 @@ function AcsGetUsersWithPagination($page, $pageSize) {
         LogError("Can't retrieve Users from ACS")
         AcsError($err)     
         LogError("Exiting...")
-        sendEmailUpdate
+        SendEmailUpdate
         exit 255
     } 
     return $response
@@ -415,7 +431,7 @@ function AcsGetUsers() {
             $totalCount = 0
         }
         else { 
-            sendEmailUpdate
+            SendEmailUpdate
             exit 10 
         }
     }
@@ -485,7 +501,7 @@ function AdGetUserGroups() {
     catch {
         LogError "Can't retrieve the AD Group $($script:params.adGroup)"
         $_
-        sendEmailUpdate
+        SendEmailUpdate
         exit 253
     }
     return $adGroupRetrieved
@@ -498,7 +514,7 @@ function AdGetGroupMembers($adGroup) {
     }
     catch {
         LogError "Can't retrieve users from the AD Group $($adGroup)"
-        sendEmailUpdate
+        SendEmailUpdate
         exit 252
     }
     LogDebug("$($script:adAccountsNumber) user(s) retrieved from AD.")
@@ -621,12 +637,12 @@ Currently, the registration process only works from a PowerShell with the admins
             $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
         }
         if ($response -like "y") {
-            $trigger = New-JobTrigger -Daily -at "2:00AM" -DaysInterval 1
+            $trigger = New-JobTrigger -Daily -At "02:00"
+            $options = New-ScheduledJobOption -MultipleInstancePolicy StopExisting 
             $scriptPath = Join-Path $scriptLocation $scriptName
             $creds = Get-Credential
-            Register-ScheduledJob -Name "ACAS" -FilePath $scriptPath -Trigger $trigger -Credential $creds -ArgumentList $configFile
-        }
-        else {Write-Host "Nothing done."}
+            Register-ScheduledJob -Name "ACAS" -File $scriptPath -ArgumentList $configFile -Trigger $trigger -Credential $creds -ScheduledJobOption $options -RunNow
+        } else {Write-Host "Nothing done."}
     }
     else {
         Write-Warning "This script is already registered."
@@ -636,16 +652,39 @@ Currently, the registration process only works from a PowerShell with the admins
     }
 }
 function Unregister() {
-    $id = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue).Id
-    if ($id -ne $null) {
+    Write-Host "Check if the task is running."
+    $runningJob = (Get-Job -Name ACAS -ErrorAction SilentlyContinue)
+    if ($runningJob -notlike $null) {
+        $runningJob
+        foreach ($job in $runningJob) {
+            Write-Host "Trying to stop the running task $($job.Id)."
+            Stop-Job $job.Id
+            Remove-Job $job.Id
+        }
+    }
+    else {
+        Write-Host "This task is currently stopped."
+    }
+    Write-Host ""
+    Write-Host "Check if the task is registered."
+    $scheduledJob = (Get-ScheduledJob -Name ACAS -ErrorAction SilentlyContinue)
+    if ($scheduledJob -notlike $null) {
+        $scheduledJob
+        Write-Host ""
         $response = "x"
         while ($response -notlike "y" -and $response -notlike "n" ) {
             $response = Read-Host "Do you want to unregister this script (y/n)?"
         }
         if ($response -like "y") {
-            Unregister-ScheduledJob -id $id
-            Write-Host "ScheduleJob unregistered."
-            Write-Host Get-ScheduledJob
+            Write-Host "Trying to unregisterd the task $($job.Id)."
+            try {
+                Get-ScheduledTask -TaskName "ACAS" | Unregister-ScheduledTask -Confirm:$false
+                Write-Host "ScheduleJob unregistered."
+            }
+            catch {
+                $_
+                Write-Host "Not able to unregsiter the task."
+            }
         }
         else {Write-Host "Nothing done."}
     }
@@ -728,6 +767,6 @@ else {
     if ($doNotCreate) { LogWarning("Audit Mode!")}
     LogInfo("Starting process")
     StartProcess
-    LogInfo("Process finisehd")
-    sendEmailUpdate
+    LogInfo("Process finished")
+    SendEmailUpdate
 }
