@@ -637,7 +637,7 @@ Currently, the registration process only works from a PowerShell with the admins
             $response = Read-Host "Do you want to register this script to run it every day (y/n)?"
         }
         if ($response -like "y") {
-            $trigger = New-JobTrigger -Daily -At "02:00"
+            $trigger = New-JobTrigger -Daily -At "02:00AM"
             $options = New-ScheduledJobOption -MultipleInstancePolicy StopExisting 
             $scriptPath = Join-Path $scriptLocation $scriptName
             $creds = Get-Credential
