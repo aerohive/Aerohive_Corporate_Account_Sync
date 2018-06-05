@@ -341,7 +341,7 @@ function AcsRefreshAccessToken() {
                 "client_secret" = $script:params.clientSecret;
                 "client_id"     = $script:params.clientId;
                 "grant_type"    = "refresh_token";
-                "refresh_token" = $refreshToken
+                "refresh_token" = $script:params.refreshToken
             }
             $response = (Invoke-RestMethod -Uri $uri -Headers @{"Content-Type" = "application/x-www-form-urlencoded"} -Body $body -Method Post)
             LogInfo("ACS Access Token refreshed. Saving it.")
