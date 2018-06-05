@@ -399,7 +399,7 @@ function AcsError($e) {
 }
 function AcsGetUsersWithPagination($page, $pageSize) {
     try { 
-        $uri = "https://$($script:params.vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:params.ownerId)&userGroup=$($acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
+        $uri = "https://$($script:params.vpcUrl)/xapi/v1/identity/credentials?ownerId=$($script:params.ownerId)&userGroup=$($script:params.acsUserGroupId)&page=$($page)&pageSize=$($pageSize)"
         $response = (Invoke-RestMethod -Uri $uri -Headers $script:headers -Method Get)
     }
     catch {   
