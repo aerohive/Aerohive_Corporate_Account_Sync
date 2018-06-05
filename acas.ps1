@@ -1,4 +1,4 @@
-﻿
+
 param(
     [Parameter(Mandatory = $false, HelpMessage = "Path to the configuration file.")] 
     [alias ('file', 'f')]
@@ -443,6 +443,7 @@ function AcsCreateAccount($adUser) {
         LogInfo("CHECK ONLY! The account $($adUser.$($script:params.acsUserName)) should be created" )
     }
     else {
+        Start-Sleep 0.2
         LogInfo("Creating $($adUser.$($script:params.acsUserName))")
         $acsUser = @{
             "userName"      = $adUser.$($script:params.acsUserName);
@@ -474,6 +475,7 @@ function AcsDeleteAccount($acsUser) {
         LogInfo("CHECK ONLY! The account $($acsUser.userName) with Id $($acsUser.id) should be deleted" )
     }
     else {
+        Start-Sleep 0.2
         LogInfo("Deleting $($acsUser.userName) with Id $($acsUser.id)")
         $acsUserId = $acsUser.id
         try {
@@ -554,48 +556,55 @@ function TestUser() {
 function StartProcess() {
     $acsUsers = AcsGetUsers
     $adUsers = AdGetUsers
-    $validAcsUsers = @()
+    $usersOnAdAndAcs = @()
     $i = 0
     foreach ($adUser in $adUsers) {
         $acsAccountExists = $false
         foreach ($acsUser in $acsUsers) {
-            if ($adUser.$($script:params.acsUserName) -like $acsUser.userName -And $adUser.Enabled -like "False") {
-                $mess = "$($adUser.$($script:params.acsUserName)) is disabled. Should be removed"
-                LogDebug($mess)
-                AcsDeleteAccount($acsUser)
-                break     
+            if ($adUser.$($script:params.acsUserName) -like $acsUser.userName) {
+                $usersOnAdAndAcs += $acsUser
+                #account exists on AD and ACS, but disabled on AD
+                if ($adUser.Enabled -like "False") {
+                    $mess = "$($adUser.$($script:params.acsUserName)) is disabled. Should be removed"
+                    LogDebug($mess)
+                    AcsDeleteAccount($acsUser)
+                    break     
+                }
+                #account exists on AD and ACS, and enabled on AD
+                elseif ($adUser.Enabled -like "True") {
+                    $mess = "$($adUser.$($script:params.acsUserName)) is enabled and already has a PPSK. nothing to do"
+                    LogDebug($mess)
+                    $acsAccountExists = $true
+                    break
+                } 
             }
-            elseif ($adUser.$($script:params.acsUserName) -like $acsUser.userName -And $adUser.Enabled -like "True") {
-                $acsAccountExists = $true
-                $validAcsUsers += $acsUser
-                break
-            } 
         }
-        if (-not $acsAccountExists) {
+        #account exists on AD and is enabled, but not on ACS
+        if (-not $acsAccountExists -And $adUser.Enabled -like "True") {
             $mess = "$($adUser.$($script:params.acsUserName)) doesn't have any PPSK. Should be created"
             LogDebug($mess)
             AcsCreateAccount($adUser)
         }
-        else {
-            $mess = "$($adUser.$($script:params.acsUserName)) is enabled and already has a PPSK. nothing to do"
-            LogDebug($mess)
-        }
+
         $i++
         $percentage = (($i / $adUsers.length) * 100)
         Write-Progress -activity "Checking AD Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
     }
 
 
-    $i = 0
-    foreach ($acsUser in $acsUsers) {
-        if ( $validAcsUsers -notcontains $acsUser) {
-            $mess = "$($acsUSer.userName) should be removed because it does not belong to the AD"
-            LogDebug($mess)
-            AcsDeleteAccount($acsUser)
+    if ($acsUsers.length -gt 0){
+        $i = 0
+        foreach ($acsUser in $acsUsers) {
+            #account exists on ACS but not on AD
+            if ( $usersOnAdAndAcs -notcontains $acsUser) {
+                $mess = "$($acsUSer.userName) should be removed because it does not belong to the AD"
+                LogDebug($mess)
+                AcsDeleteAccount($acsUser)
+            }
+            $i++
+            $percentage = (($i / $acsUsers.length) * 100)
+            Write-Progress -activity "Checking Aerohive Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
         }
-        $i++
-        $percentage = (($i / $acsUsers.length) * 100)
-        Write-Progress -activity "Checking Aerohive Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
     }
 }
 
