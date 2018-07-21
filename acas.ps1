@@ -13,7 +13,7 @@ param(
     [switch]$doNotCreate,
     
     [Parameter(Mandatory = $false)] 
-    [alias ('update', 'u')]
+    [alias ('createonly', 'c')]
     [switch]$doNotdelete,    
     
     [Parameter(Mandatory = $false)] 
@@ -744,8 +744,8 @@ DESCRIPTION
                                 When the -a flag is present, the script will 
                                 not create/remove any account.
             
-            -u
-            -update             Update will only update/create ACS with new AD Users
+            -c
+            -createonly             Update will only update/create ACS with new AD Users
                                 but will not delete the removed or disabled AD users
             
             -g
