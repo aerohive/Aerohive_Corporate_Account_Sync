@@ -11,7 +11,11 @@ param(
     [Parameter(Mandatory = $false)] 
     [alias ('audit', 'a')]
     [switch]$doNotCreate,
-
+    
+    [Parameter(Mandatory = $false)] 
+    [alias ('createonly', 'c')]
+    [switch]$doNotdelete,    
+    
     [Parameter(Mandatory = $false)] 
     [alias ('register', 'r')]
     [switch]$registerJob,
@@ -474,6 +478,9 @@ function AcsDeleteAccount($acsUser) {
     if ($doNotCreate) {
         LogInfo("CHECK ONLY! The account $($acsUser.userName) with Id $($acsUser.id) should be deleted" )
     }
+    elseif ($doNotDelete) {
+        LogInfo("UPDATE ONLY! The account $($acsUser.userName) with Id $($acsUser.id) will be deleted on full sync!" )
+    }
     else {
         Start-Sleep 0.2
         LogInfo("Deleting $($acsUser.userName) with Id $($acsUser.id)")
@@ -736,6 +743,10 @@ DESCRIPTION
             -audit              Audit the AD and ACS users to list differences.
                                 When the -a flag is present, the script will 
                                 not create/remove any account.
+            
+            -c
+            -createonly             Update will only update/create ACS with new AD Users
+                                but will not delete the removed or disabled AD users
             
             -g
             -group              List all the available User Groups from ACS. This
