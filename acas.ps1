@@ -44,6 +44,8 @@ $script:deletedAccounts = @()
 $script:failedAccounts = @()
 $script:smtpBody = @()
 $script:params = @{}
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 <#--------------------------------------------------------------
 LOAD SETTINGS
 --------------------------------------------------------------#>
