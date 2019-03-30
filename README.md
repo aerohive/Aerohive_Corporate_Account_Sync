@@ -47,7 +47,11 @@ You can also move the settings_example.ini file to settings.ini in the same fold
                 -audit                  Audit the AD and ACS users to list differences.
                                         When the -a flag is present, the script will 
                                         not create/remove any account.
-
+                                        
+                -c
+                -createonly             Update will only update/create ACS with new AD Users
+                                        but will not delete the removed or disabled AD users
+                                        
                 -g
                 -group                  List all the available User Groups from ACS. This
                                         can be used to configure the "acsUserGroupId"
