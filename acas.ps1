@@ -611,7 +611,11 @@ function StartProcess() {
                 AcsDeleteAccount($acsUser)
             }
             $i++
-            $percentage = (($i / $acsUsers.Count) * 100)
+            if ($l -eq $null){
+                $percentage = 0
+            } else {
+                $percentage =  (($i / $l) * 100)
+            }           
             Write-Progress -activity "Checking Aerohive Users" -status "Progress: " -PercentComplete $percentage  -CurrentOperation "$percentage%"
         }
     }
