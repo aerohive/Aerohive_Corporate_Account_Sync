@@ -1,3 +1,6 @@
+# NO LONGER MAINTAINED
+As of August 30, 2019 this project is no longer maintained. It should still (probably) work, but I am no longer providing support, fixing issues, or adding new features.
+
 # Aerohive Corporate Account Sync
 Aerohive Corporate Account Sync is a PowerShell Script using ACS APIs to automate the creation of User Accounts on HiveManager NG for domain users.
 
